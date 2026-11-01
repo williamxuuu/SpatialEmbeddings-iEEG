@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Experiment outputs (keep these off GitHub; copy summaries instead)
+results/
+runs/
+logs/
+*.pt
+*.ckpt
+
+# Data and atlas caches
+data/
+nilearn_data/
+
+# Your personal cluster settings (account names etc.)
+slurm/cluster.env
+
+.DS_Store
+third_party/
+
+# Paper PDFs (~100 MB; keep them in Zotero, not git)
+papers/

@@ -1,0 +1,13 @@
+# Install with: pip install -e ".[dev,neuroprobe]"  (preferred)
+# or:           pip install -r requirements.txt && pip install -e .
+torch>=2.1
+numpy
+scipy
+scikit-learn
+pyyaml
+pandas
+matplotlib
+nibabel
+nilearn>=0.11
+neuroprobe
+pytest

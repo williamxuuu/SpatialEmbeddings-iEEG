@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "locemb"
+version = "0.1.0"
+description = "Spatial (location) encodings for intracranial EEG foundation models"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.1",
+  "numpy",
+  "scipy",
+  "scikit-learn",
+  "pyyaml",
+  "pandas",
+  "matplotlib",
+  "nibabel",
+  "nilearn>=0.11",
+]
+
+[project.optional-dependencies]
+neuroprobe = ["neuroprobe"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

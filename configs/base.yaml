@@ -1,0 +1,51 @@
+# Defaults shared by every run. Other configs start with `_base: base.yaml`
+# and only list what they change.
+exp_name: scratch
+run_name: default
+results_dir: results
+seed: 0
+device: auto            # auto = GPU if available
+
+data:
+  name: synthetic
+  split: cross_subject
+
+preprocess:
+  reref: none
+  notch_hz: null
+  bandpass: null
+  resample_hz: null
+  zscore: true
+  clip: 10
+
+spatial:
+  type: none            # none | coords | region
+  source: atlas         # atlas | prob_atlas | dataset_labels
+  atlas: lobes
+  include_subcortical: true
+  mode: hard            # hard | sphere | gaussian | trilinear | prob
+  radius_mm: 5
+  sigma_mm: 3
+  fallback_mm: 5
+  topk: 8
+  min_weight: 0.05
+  control: none         # none | shuffle_electrodes | random_neighbors
+
+model:
+  name: transformer     # transformer | linear
+  d: 64
+  n_patches: 4
+  layers: 4
+  heads: 4
+  dropout: 0.1
+
+train:
+  epochs: 40
+  batch_size: 32
+  lr: 1.0e-3
+  weight_decay: 1.0e-2
+  warmup_frac: 0.05
+  patience: 8
+  grad_clip: 1.0
+  num_workers: 4
+  amp: true

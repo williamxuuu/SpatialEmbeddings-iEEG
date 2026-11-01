@@ -1,0 +1,19 @@
+# Real data: Neuroprobe tasks on Brain Treebank.
+# Fill in `root` (or export ROOT_DIR_BRAINTREEBANK) and check subject_trials
+# against the Neuroprobe Lite list before the first real run.
+_base: base.yaml
+data:
+  name: neuroprobe
+  root: null                       # e.g. /storage/scratch1/<you>/braintreebank
+  eval_name: speech                # VERIFY: exact Neuroprobe task name
+  split: cross_session
+  fold: 0
+  subject_trials: [[1, 2], [2, 6], [3, 0], [4, 1], [7, 0], [10, 0]]   # VERIFY
+  val_fraction: 0.1
+preprocess:
+  reref: car
+  notch_hz: 60
+  bandpass: [1, 200]
+  resample_hz: 512                 # 2048 Hz -> 512 Hz keeps compute down
+  zscore: true
+  clip: 10

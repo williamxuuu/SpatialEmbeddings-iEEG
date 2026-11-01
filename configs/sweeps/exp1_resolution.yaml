@@ -1,0 +1,32 @@
+# Experiment 1: resolution x performance curve.
+# 16 spatial settings x 2 models x 3 seeds, minus coords+linear = 93 runs.
+config: configs/neuroprobe.yaml
+exp_name: exp1_resolution
+axes:
+  spatial:
+    # --- reference points ---
+    none:         {spatial.type: none}
+    coords:       {spatial.type: coords}                    # continuous xyz (PopT-style)
+    # --- pure resolution knob: cubes, no anatomy ---
+    grid80:       {spatial.type: region, spatial.atlas: grid80}
+    grid40:       {spatial.type: region, spatial.atlas: grid40}
+    grid20:       {spatial.type: region, spatial.atlas: grid20}
+    grid10:       {spatial.type: region, spatial.atlas: grid10}
+    grid5:        {spatial.type: region, spatial.atlas: grid5}
+    # --- anatomical / functional atlases, coarse -> fine ---
+    lobes:        {spatial.type: region, spatial.atlas: lobes}
+    ho:           {spatial.type: region, spatial.atlas: ho}
+    destrieux:    {spatial.type: region, spatial.atlas: destrieux}
+    schaefer100:  {spatial.type: region, spatial.atlas: schaefer100}
+    schaefer200:  {spatial.type: region, spatial.atlas: schaefer200}
+    schaefer400:  {spatial.type: region, spatial.atlas: schaefer400}
+    schaefer1000: {spatial.type: region, spatial.atlas: schaefer1000}
+    # --- controls: same number of regions, location link broken ---
+    destrieux_shuffled: {spatial.type: region, spatial.atlas: destrieux, spatial.control: shuffle_electrodes}
+    grid20_shuffled:    {spatial.type: region, spatial.atlas: grid20, spatial.control: shuffle_electrodes}
+  model:
+    transformer: {model.name: transformer}
+    linear:      {model.name: linear}
+  seed: [0, 1, 2]
+exclude:
+  - {spatial: coords, model: linear}

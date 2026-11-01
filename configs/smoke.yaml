@@ -1,0 +1,18 @@
+# Tiny synthetic run: checks the whole pipeline in ~1 minute on a laptop CPU.
+# python -m locemb.train --config configs/smoke.yaml spatial.type=region spatial.atlas=grid40
+_base: base.yaml
+exp_name: smoke
+synthetic:
+  n_subjects: 6
+  n_test_subjects: 2
+  windows_per_subject: 120
+  sfreq: 256
+  electrodes: [20, 40]
+model:
+  d: 32
+  layers: 2
+  n_patches: 4
+train:
+  epochs: 3
+  batch_size: 16
+  num_workers: 0

@@ -1,0 +1,39 @@
+# Experiment 2: hard (one region) vs soft (weighted mix of nearby regions).
+# Model and data are identical across rows; ONLY the region weights change.
+# 20 settings x 2 models x 3 seeds, minus coords+linear = 117 runs.
+config: configs/neuroprobe.yaml
+exp_name: exp2_soft_regions
+axes:
+  spatial:
+    # Fine parcels (Destrieux): borders are close, so small balls already mix
+    destrieux_hard:     {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard}
+    destrieux_sphere3:  {spatial.type: region, spatial.atlas: destrieux, spatial.mode: sphere, spatial.radius_mm: 3}
+    destrieux_sphere5:  {spatial.type: region, spatial.atlas: destrieux, spatial.mode: sphere, spatial.radius_mm: 5}
+    destrieux_sphere10: {spatial.type: region, spatial.atlas: destrieux, spatial.mode: sphere, spatial.radius_mm: 10}
+    destrieux_gauss3:   {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    # Control: same amount of mixing, but the mixed-in regions are random
+    destrieux_sphere5_randnbr: {spatial.type: region, spatial.atlas: destrieux, spatial.mode: sphere, spatial.radius_mm: 5, spatial.control: random_neighbors}
+    destrieux_shuffled: {spatial.type: region, spatial.atlas: destrieux, spatial.control: shuffle_electrodes}
+    # Coarse groups (lobes): need bigger balls to reach a border
+    lobes_hard:         {spatial.type: region, spatial.atlas: lobes, spatial.mode: hard}
+    lobes_sphere10:     {spatial.type: region, spatial.atlas: lobes, spatial.mode: sphere, spatial.radius_mm: 10}
+    lobes_sphere20:     {spatial.type: region, spatial.atlas: lobes, spatial.mode: sphere, spatial.radius_mm: 20}
+    lobes_gauss6:       {spatial.type: region, spatial.atlas: lobes, spatial.mode: gaussian, spatial.sigma_mm: 6}
+    lobes_sphere10_randnbr: {spatial.type: region, spatial.atlas: lobes, spatial.mode: sphere, spatial.radius_mm: 10, spatial.control: random_neighbors}
+    # Probabilistic atlas: "how often is this spot region X across people"
+    ho_hard:            {spatial.type: region, spatial.atlas: ho, spatial.mode: hard}
+    ho_prob_argmax:     {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: hard}
+    ho_prob_soft:       {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob}
+    ho_prob_soft_s3:    {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob, spatial.sigma_mm: 3}
+    # No anatomy: blended cubes vs hard cubes
+    grid20_hard:        {spatial.type: region, spatial.atlas: grid20, spatial.mode: hard}
+    grid20_trilinear:   {spatial.type: region, spatial.atlas: grid20, spatial.mode: trilinear}
+    # Reference points
+    coords:             {spatial.type: coords}
+    none:               {spatial.type: none}
+  model:
+    transformer: {model.name: transformer}
+    linear:      {model.name: linear}
+  seed: [0, 1, 2]
+exclude:
+  - {spatial: coords, model: linear}

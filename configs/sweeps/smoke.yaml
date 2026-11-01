@@ -1,0 +1,11 @@
+# 8 tiny CPU/GPU runs on synthetic data. Use this as your FIRST Slurm job to
+# check the cluster setup end to end before spending real GPU hours.
+config: configs/smoke.yaml
+exp_name: smoke_sweep
+axes:
+  spatial:
+    none:     {spatial.type: none}
+    coords:   {spatial.type: coords}
+    grid40:   {spatial.type: region, spatial.atlas: grid40}
+    grid40_tri: {spatial.type: region, spatial.atlas: grid40, spatial.mode: trilinear}
+  seed: [0, 1]
