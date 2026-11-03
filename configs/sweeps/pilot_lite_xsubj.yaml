@@ -1,0 +1,26 @@
+# Second half of the pilot: same as pilot_lite.yaml but tested on people the model
+# never trained on. This is where location codes have to generalize.
+# 7 spatial settings x 2 electrode sets x 3 seeds = 42 small-transformer runs.
+# Same windows and labels in both electrode sets; only the electrodes differ.
+# Split: cross_subject. Train on subjects 1, 3, 4, 10 (all their Lite movies,
+# minus any movie the test people watched); test on subjects 2 and 7. See docs/pilot.md.
+config: configs/neuroprobe.yaml
+exp_name: pilot_lite_xsubj
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.test_subjects: [2, 7]
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+axes:
+  spatial:
+    none:        {spatial.type: none}
+    lobes:       {spatial.type: region, spatial.atlas: lobes}
+    ho:          {spatial.type: region, spatial.atlas: ho}
+    destrieux:   {spatial.type: region, spatial.atlas: destrieux}
+    schaefer400: {spatial.type: region, spatial.atlas: schaefer400}
+    coords:      {spatial.type: coords}
+    destrieux_shuffled: {spatial.type: region, spatial.atlas: destrieux, spatial.control: shuffle_electrodes}
+  electrodes:
+    lite: {data.electrodes: lite}
+    all:  {data.electrodes: all}
+  seed: [0, 1, 2]

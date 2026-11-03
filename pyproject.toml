@@ -20,7 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-neuroprobe = ["neuroprobe"]
+# Pinned to the commit the adapter was written and tested against.
+neuroprobe = ["neuroprobe @ git+https://github.com/azaho/neuroprobe@b282acd497134bf0454cd36e14fb03bf0fa91c42", "h5py",
+              "requests", "beautifulsoup4"]  # last two: its download script
 dev = ["pytest"]
 
 [tool.setuptools.packages.find]

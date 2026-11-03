@@ -15,8 +15,8 @@ logs/
 *.ckpt
 
 # Data and atlas caches
-data/
-nilearn_data/
+/data/
+/nilearn_data/
 
 # Your personal cluster settings (account names etc.)
 slurm/cluster.env

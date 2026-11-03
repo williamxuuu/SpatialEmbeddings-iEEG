@@ -1,0 +1,24 @@
+# Pilot: does location help on real data, and does Neuroprobe Lite's
+# 120-electrode cap change the answer?
+# 7 spatial settings x 2 electrode sets x 3 seeds = 42 small-transformer runs.
+# Same windows and labels in both electrode sets; only the electrodes differ.
+# Split: cross_session (train on one Lite movie, test on the subject's other),
+# all 6 subjects trained into one model. See docs/pilot.md.
+config: configs/neuroprobe.yaml
+exp_name: pilot_lite
+overrides:
+  model.name: transformer
+  data.split: cross_session
+axes:
+  spatial:
+    none:        {spatial.type: none}
+    lobes:       {spatial.type: region, spatial.atlas: lobes}
+    ho:          {spatial.type: region, spatial.atlas: ho}
+    destrieux:   {spatial.type: region, spatial.atlas: destrieux}
+    schaefer400: {spatial.type: region, spatial.atlas: schaefer400}
+    coords:      {spatial.type: coords}
+    destrieux_shuffled: {spatial.type: region, spatial.atlas: destrieux, spatial.control: shuffle_electrodes}
+  electrodes:
+    lite: {data.electrodes: lite}
+    all:  {data.electrodes: all}
+  seed: [0, 1, 2]

@@ -107,7 +107,7 @@ python scripts/estimate_compute.py configs/sweeps/exp1_resolution.yaml configs/s
 
 Assumed time per run:
 
-- **Transformer: ~0.5–1 GPU-hour.** Based on 1 s windows, about 100–250 electrodes, a 4-layer d=64 transformer, and 40 epochs. Data loading with per-window filtering is likely the bottleneck, not the GPU.
+- **Transformer: ~0.5–1 GPU-hour.** Based on 1 s windows, about 100–250 electrodes, a 4-layer d=64 transformer, and 40 epochs. Data loading may be the bottleneck rather than the GPU; the pilot will measure it.
 - **Linear model: ~0.25 hour.**
 
 | Sweep | Runs | Rough GPU-hours |
@@ -125,7 +125,7 @@ Changing the spatial encoding of a pretrained model usually means **redoing the 
 
 ### Ways to cut cost
 
-- Pre-filter whole sessions once and cache them; per-window filtering is redundant work.
+- Whole recordings are filtered once and cached (done: `data/session_cache.py`).
 - Run the linear model on CPU nodes.
 - Start with 1 seed to find interesting regions of the curve, then add seeds only there.
 
@@ -134,8 +134,8 @@ Changing the spatial encoding of a pretrained model usually means **redoing the 
 ## Order of work
 
 1. **Smoke sweep on the cluster** (synthetic data, minutes): proves the account, env, and GPU setup work.
-2. **Check the Neuroprobe adapter:** run `scripts/inspect_neuroprobe.py` and fix the `VERIFY` notes in `src/locemb/data/neuroprobe_adapter.py`.
-3. **Pilot:** 4–6 real runs to measure time per run, then re-estimate the budget.
+2. **Pilot on Neuroprobe Lite** (`docs/pilot.md`): 42 runs + 42 cross-subject runs. Checks that location helps at all, that Lite's 120-electrode cap doesn't change the answer, and measures time per run.
+3. **Decide how to scale** from the pilot report, then re-estimate the budget.
 4. **Exp 1** with 1 seed, then 3 seeds.
 5. **Exp 2.**
 6. **Plug in a real architecture** (BaRISTA is the natural first one; its code is public at github.com/ShanechiLab/BaRISTA) behind the same `build_model` interface, then repeat the key settings.

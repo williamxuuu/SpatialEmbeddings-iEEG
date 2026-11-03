@@ -17,4 +17,5 @@ fi
 export LOCEMB_ATLAS_DIR="${LOCEMB_ATLAS_DIR:-$_repo/nilearn_data}"
 export PYTHONUNBUFFERED=1
 [ -n "${ROOT_DIR_BRAINTREEBANK:-}" ] && export ROOT_DIR_BRAINTREEBANK
+[ -n "${LOCEMB_CACHE_DIR:-}" ] && export LOCEMB_CACHE_DIR
 unset _repo _env
