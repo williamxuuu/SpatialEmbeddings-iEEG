@@ -45,6 +45,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import ConcatDataset, Dataset
 
@@ -140,7 +141,8 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             try:  # per-electrode atlas labels shipped with Brain Treebank (e.g. DK / Destrieux)
                 meta = subj.get_all_electrode_metadata().set_index("Electrode")
                 for col in meta.columns:
-                    if meta[col].dtype == object:
+                    # text columns: "object" in pandas < 3, a string dtype in pandas >= 3
+                    if pd.api.types.is_object_dtype(meta[col]) or pd.api.types.is_string_dtype(meta[col]):
                         extra[col] = [str(meta.at[e, col]) for e in labels]
             except Exception as ex:  # not needed for atlas-based encodings
                 print(f"[neuroprobe] subject {s}: no dataset labels ({ex})")

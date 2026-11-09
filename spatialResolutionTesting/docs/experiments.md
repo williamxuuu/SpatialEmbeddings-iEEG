@@ -55,7 +55,9 @@ A real check at known MNI spots (Destrieux, 5 mm sphere) gave sensible mixes:
 - Precentral spot: precentral 0.48, central sulcus 0.41, postcentral 0.11.
 - Fusiform spot: lateral occipito-temporal sulcus 0.65, fusiform 0.35.
 
-### Main comparisons (`configs/sweeps/exp2_soft_regions.yaml`, 117 runs)
+### Main comparisons (`softRegionTesting/configs/sweeps/exp2_soft_regions.yaml`, 117 runs)
+
+A smaller pilot with written-down pass/fail rules comes first: [`softRegionTesting/README.md`](../../softRegionTesting/README.md).
 
 - **Soft vs hard, same atlas:** Destrieux (fine) and lobes (coarse), several radii.
 - **Probabilistic atlas vs its own hard version** (`ho_prob_soft` vs `ho_prob_argmax`).
@@ -99,7 +101,7 @@ A stronger test of the biological story is **per-electrode**: does the soft-minu
 **These are guesses until a pilot runs.** Replace them with measured times:
 
 ```bash
-python scripts/estimate_compute.py configs/sweeps/exp1_resolution.yaml configs/sweeps/exp2_soft_regions.yaml \
+python scripts/estimate_compute.py configs/sweeps/exp1_resolution.yaml ../softRegionTesting/configs/sweeps/exp2_soft_regions.yaml \
   --pilot results/<pilot exp> --parallel 8
 ```
 
@@ -137,6 +139,6 @@ Changing the spatial encoding of a pretrained model usually means **redoing the 
 2. **Pilot on Neuroprobe Lite** (`docs/pilot.md`): 42 runs + 42 cross-subject runs. Checks that location helps at all, that Lite's 120-electrode cap doesn't change the answer, and measures time per run.
 3. **Decide how to scale** from the pilot report, then re-estimate the budget.
 4. **Exp 1** with 1 seed, then 3 seeds.
-5. **Exp 2.**
+5. **Exp 2:** first its pilot (`softRegionTesting/`, 90 runs; best after the Exp 1 pilot shows location helps), then the full sweep.
 6. **Plug in a real architecture** (BaRISTA is the natural first one; its code is public at github.com/ShanechiLab/BaRISTA) behind the same `build_model` interface, then repeat the key settings.
 7. **Preprocessing axis:** repeat the best and worst settings under 2–3 `preprocess:` settings.

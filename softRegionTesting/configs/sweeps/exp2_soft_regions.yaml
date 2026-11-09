@@ -1,8 +1,12 @@
 # Experiment 2: hard (one region) vs soft (weighted mix of nearby regions).
 # Model and data are identical across rows; ONLY the region weights change.
 # 20 settings x 2 models x 3 seeds, minus coords+linear = 117 runs.
+# Paths are relative to spatialResolutionTesting/, where every job runs
+# (submit with: bash softRegionTesting/submit.sh exp2_soft_regions 8).
 config: configs/neuroprobe.yaml
 exp_name: exp2_soft_regions
+overrides:
+  results_dir: ../softRegionTesting/results
 axes:
   spatial:
     # Fine parcels (Destrieux): borders are close, so small balls already mix
@@ -22,8 +26,8 @@ axes:
     lobes_sphere10_randnbr: {spatial.type: region, spatial.atlas: lobes, spatial.mode: sphere, spatial.radius_mm: 10, spatial.control: random_neighbors}
     # Probabilistic atlas: "how often is this spot region X across people"
     ho_hard:            {spatial.type: region, spatial.atlas: ho, spatial.mode: hard}
-    ho_prob_argmax:     {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: hard}
-    ho_prob_soft:       {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob}
+    ho_prob_argmax:     {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: hard, spatial.sigma_mm: 0}
+    ho_prob_soft:       {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob, spatial.sigma_mm: 0}
     ho_prob_soft_s3:    {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob, spatial.sigma_mm: 3}
     # No anatomy: blended cubes vs hard cubes
     grid20_hard:        {spatial.type: region, spatial.atlas: grid20, spatial.mode: hard}

@@ -51,7 +51,7 @@ In `squeue`, the `REASON` column explains why a job hasn't started:
 **One time, on a login node:**
 
 ```bash
-git clone <your repo url> LocationEmbeddings && cd LocationEmbeddings
+git clone <your repo url> SpatialEmbeddings && cd SpatialEmbeddings/spatialResolutionTesting
 cp slurm/cluster.env.example slurm/cluster.env      # fill in account / QOS / paths
 bash slurm/setup_env.sh                              # makes the Python env, caches atlases, runs tests
 ```

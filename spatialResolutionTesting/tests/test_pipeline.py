@@ -31,8 +31,7 @@ def test_tiny_run(tmp_path, model, spatial):
 
 def test_sweep_expansion_counts():
     import yaml
-    for name, n in [("smoke", 8), ("exp1_resolution", 93), ("exp2_soft_regions", 117),
-                    ("pilot_lite", 42), ("pilot_lite_xsubj", 42)]:
+    for name, n in [("smoke", 8), ("exp1_resolution", 93), ("pilot_lite", 42), ("pilot_lite_xsubj", 42)]:
         jobs = expand(yaml.safe_load(open(f"configs/sweeps/{name}.yaml")))
         assert len(jobs) == n
         assert len({j["overrides"]["run_name"] for j in jobs}) == n

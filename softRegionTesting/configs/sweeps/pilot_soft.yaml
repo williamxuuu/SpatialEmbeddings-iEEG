@@ -1,0 +1,29 @@
+# Experiment 2 pilot, part 1: does a weighted mix of nearby regions ("soft")
+# beat one region per electrode ("hard")? Tested on new movies (cross_session).
+# Main soft setting: destrieux_gauss3 (nearby map points count less with
+# distance: half weight at 3.5 mm, cut off at 9 mm), matching the signal
+# spread measured by McCarty et al. 2022. destrieux_sphere10 is a much wider
+# check (every point within 10 mm counts equally). See ../../METHOD.md.
+# 8 settings x 5 seeds = 40 small-transformer runs on the 12 Neuroprobe Lite
+# recordings. Only the region weights change between rows. See ../README.md.
+#
+# Paths below are relative to spatialResolutionTesting/, where every job runs
+# (submit with: bash softRegionTesting/submit.sh pilot_soft 8).
+config: configs/neuroprobe.yaml
+exp_name: pilot_soft
+overrides:
+  results_dir: ../softRegionTesting/results
+  model.name: transformer
+  data.split: cross_session
+  data.electrodes: lite
+axes:
+  spatial:
+    none:                {spatial.type: none}
+    destrieux_hard:      {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard}
+    destrieux_gauss3:    {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    destrieux_sphere10:  {spatial.type: region, spatial.atlas: destrieux, spatial.mode: sphere, spatial.radius_mm: 10}
+    destrieux_gauss3_randnbr: {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+    ho_prob_argmax:      {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: hard, spatial.sigma_mm: 0}
+    ho_prob_soft:        {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob, spatial.sigma_mm: 0}
+    coords:              {spatial.type: coords}
+  seed: [0, 1, 2, 3, 4]

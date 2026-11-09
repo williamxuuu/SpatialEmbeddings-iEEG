@@ -1,0 +1,34 @@
+# Experiment 2 pilot, part 2: same question, tested on people the model never
+# trained on (cross_subject: train on subjects 1, 3, 4, 10; test on 2 and 7).
+# 10 settings x 5 seeds = 50 small-transformer runs. See ../README.md.
+#
+# Adds two "nearest seen" rows. A new person's electrode can land in a region
+# no training person had; normally it gets a shared <unknown> code. Soft
+# weights reach into neighbouring regions, so they hit <unknown> less often
+# (measured: 7.2% vs 10.1% of held-out weight). The *_nearest rows map those
+# electrodes to the nearest region training did see, so hard and soft are
+# compared with the same coverage (both ~0.4%).
+#
+# Paths below are relative to spatialResolutionTesting/, where every job runs.
+config: configs/neuroprobe.yaml
+exp_name: pilot_soft_xsubj
+overrides:
+  results_dir: ../softRegionTesting/results
+  model.name: transformer
+  data.split: cross_subject
+  data.test_subjects: [2, 7]
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  data.electrodes: lite
+axes:
+  spatial:
+    none:                {spatial.type: none}
+    destrieux_hard:      {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard}
+    destrieux_hard_nearest: {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard, spatial.unseen: nearest_seen}
+    destrieux_gauss3:    {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    destrieux_gauss3_nearest: {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.unseen: nearest_seen}
+    destrieux_sphere10:  {spatial.type: region, spatial.atlas: destrieux, spatial.mode: sphere, spatial.radius_mm: 10}
+    destrieux_gauss3_randnbr: {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+    ho_prob_argmax:      {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: hard, spatial.sigma_mm: 0}
+    ho_prob_soft:        {spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob, spatial.sigma_mm: 0}
+    coords:              {spatial.type: coords}
+  seed: [0, 1, 2, 3, 4]

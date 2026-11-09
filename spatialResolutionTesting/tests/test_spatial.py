@@ -120,3 +120,28 @@ def test_prob_atlas_soft():
         pytest.skip(f"atlas download failed: {e}")
     _check_rows(a)
     assert a.stats["frac_electrodes_multi_region"] > 0.2
+
+
+def test_nearest_seen_replaces_unknown_for_test_subjects():
+    subs = _subjects()
+    fit = {"s0", "s1"}
+    spec = {"type": "region", "atlas": "grid5", "mode": "hard"}
+    a = build_assignment(spec, subs, fit)
+    b = build_assignment({**spec, "unseen": "nearest_seen", "unseen_max_mm": 60}, subs, fit)
+    assert a.stats["frac_weight_unknown_test_subjects"] > 0.5
+    assert b.stats["frac_weight_unknown_test_subjects"] == 0.0
+    assert b.stats["frac_test_electrodes_remapped"] > 0.5
+    for sid in fit:                                   # training people are untouched
+        assert torch.equal(a.table[sid]["idx"], b.table[sid]["idx"])
+    # the replacement really is the nearest cube centre that training saw
+    seen = {n: i for i, n in enumerate(b.names)}
+    g = GridLabeler(5)
+    centres = {i: (np.array([int(v) for v in n.split("_")[1:]]) + 0.5) * 5
+               for n, i in seen.items() if n.startswith("cube")}
+    for e in range(subs["s2"].n_electrodes):
+        x = subs["s2"].coords[e]
+        if g.name_of(int(g(x[None])[0])) in seen:
+            continue
+        got = centres[int(b.table["s2"]["idx"][e, 0])]
+        best = min(np.linalg.norm(c - x) for c in centres.values())
+        assert np.linalg.norm(got - x) <= best + 5 * np.sqrt(3) / 2 + 1e-6

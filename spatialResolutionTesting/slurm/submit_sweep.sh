@@ -6,8 +6,9 @@
 # Finished runs are skipped automatically, so re-running this after failures
 # only redoes what's missing.
 set -euo pipefail
-cd "$(dirname "$0")/.."
 SWEEP="${1:?usage: submit_sweep.sh <sweep.yaml> [max_parallel] [extra sbatch args]}"; shift
+SWEEP="$(cd "$(dirname "$SWEEP")" && pwd)/$(basename "$SWEEP")"   # works from any folder
+cd "$(dirname "$0")/.."
 MAXPAR=16
 if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then MAXPAR="$1"; shift; fi
 source slurm/activate_env.sh

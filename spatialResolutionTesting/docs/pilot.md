@@ -69,6 +69,8 @@ If Gate 2 or 3 fails, don't scale up yet. Look at why first: the task, the model
 
 ## Steps on the cluster
 
+Run these from `spatialResolutionTesting/`.
+
 ```bash
 # 0. Once: settings and Python env (see docs/slurm_guide.md)
 cp slurm/cluster.env.example slurm/cluster.env    # account, QOS, ROOT_DIR_BRAINTREEBANK (ends in /braintreebank), LOCEMB_CACHE_DIR

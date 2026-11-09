@@ -15,11 +15,11 @@ logs/
 *.ckpt
 
 # Data and atlas caches
-/data/
-/nilearn_data/
+/spatialResolutionTesting/data/
+/spatialResolutionTesting/nilearn_data/
 
 # Your personal cluster settings (account names etc.)
-slurm/cluster.env
+/spatialResolutionTesting/slurm/cluster.env
 
 .DS_Store
 third_party/

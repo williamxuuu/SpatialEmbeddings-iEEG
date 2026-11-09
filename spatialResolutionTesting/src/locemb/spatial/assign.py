@@ -28,6 +28,10 @@ Config block:
       topk: 8
       min_weight: 0.05
       control: none | shuffle_electrodes | random_neighbors
+      unseen: unknown | nearest_seen   # test people's regions never seen in training:
+                              # map to <unknown> (default), or to the nearest region
+                              # that training did see (atlas source only)
+      unseen_max_mm: 20
       dataset_label_key: destrieux   # for source=dataset_labels
 """
 
@@ -179,6 +183,16 @@ def _entropy(w):
     return float(-(w * np.log(w)).sum()) if len(w) else 0.0
 
 
+def _nearest_seen(spec: dict, xyz: np.ndarray, index: dict, max_mm: float):
+    """Name of the region nearest to xyz (within max_mm) that training saw, or None."""
+    lab = get_labeler(spec["atlas"], spec.get("include_subcortical", True))
+    off, _ = ball_offsets(max_mm)                      # sorted by distance
+    for c in lab(xyz[None] + off):
+        if c >= 0 and (n := lab.name_of(int(c))) in index and n != UNKNOWN:
+            return n
+    return None
+
+
 def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: int = 0) -> Assignment:
     sp_type = spec.get("type", "none")
     k = int(spec.get("topk", 8)) if sp_type == "region" else 1
@@ -215,6 +229,12 @@ def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: i
 
     rng = np.random.default_rng(seed + 991)
     control = spec.get("control", "none")
+    unseen = spec.get("unseen", "unknown")
+    if unseen not in ("unknown", "nearest_seen"):
+        raise ValueError(f"Unknown spatial.unseen {unseen!r}")
+    if unseen == "nearest_seen" and spec.get("source", "atlas") != "atlas":
+        raise ValueError("spatial.unseen=nearest_seen needs spatial.source=atlas")
+    n_remapped = 0
     table = {}
     for sid, s in subjects.items():
         E = s.n_electrodes
@@ -224,9 +244,14 @@ def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: i
             if not el:
                 idx[e, 0], w[e, 0] = 0, 1.0           # no label anywhere near: <unknown>
                 continue
+            near = None
+            if unseen == "nearest_seen" and any(n not in index for n, _ in el):
+                near = _nearest_seen(spec, np.asarray(s.coords[e], dtype=np.float64), index,
+                                     float(spec.get("unseen_max_mm", 20)))
+                n_remapped += near is not None
             merged: dict[int, float] = {}
             for n, wt in el:
-                j = index.get(n, 0)                    # region never seen in training -> <unknown>
+                j = index.get(n, index.get(near, 0))   # never seen in training -> nearest seen, else <unknown>
                 merged[j] = merged.get(j, 0.0) + wt
             for col, (j, wt) in enumerate(sorted(merged.items(), key=lambda t: -t[1])):
                 idx[e, col], w[e, col] = j, wt
@@ -276,5 +301,7 @@ def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: i
         "frac_weight_unknown_test_subjects": unk_frac(test_ids),
         "mean_weight_entropy_nats": float(np.mean([_entropy(x) for x in all_w])),
         "frac_electrodes_multi_region": float(np.mean([(x > 0).sum() > 1 for x in all_w])),
+        "frac_test_electrodes_remapped": (n_remapped / sum(subjects[s].n_electrodes for s in test_ids)
+                                          if test_ids else None),
     }
     return Assignment(names, table, stats)
