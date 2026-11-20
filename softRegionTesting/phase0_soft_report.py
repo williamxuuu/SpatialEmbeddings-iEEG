@@ -24,7 +24,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "spatialResolutionTesting", "scripts"))
 from runs_table import load_runs  # noqa: E402
 
-ATLASES = ("destrieux", "schaefer400")
+ATLASES = ("schaefer400", "schaefer1000")
+F0_XSESS, F0_XSUBJ = 0.89, 0.75   # share of runs that must leave the plateau
 EARLY = 10  # "leaves the plateau" = escape by this epoch
 
 
@@ -84,8 +85,10 @@ def score_xsess(df: pd.DataFrame, out: Out):
             rr = r[r["density"] == dens]
             sets = [f"{atlas}_hard", f"{atlas}_gauss3", f"{atlas}_gauss3_randnbr"]
             sub = rr[rr["spatial"].isin(sets)]
-            out.rule(f"F0 {atlas}/{dens}", len(sub) == 9 and sub["esc_early"].sum() >= 8,
-                     f"{int(sub['esc_early'].sum())}/{len(sub)} runs leave the plateau by epoch {EARLY} (need >= 8/9)")
+            ok = len(sub) > 0 and sub["esc_early"].mean() >= F0_XSESS
+            out.rule(f"F0 {atlas}/{dens}", ok,
+                     f"{int(sub['esc_early'].sum())}/{len(sub)} runs leave the plateau by epoch {EARLY} "
+                     f"(need >= {F0_XSESS:.0%})")
             d1 = _diff(rr, f"{atlas}_gauss3", f"{atlas}_hard", [])
             d2 = _diff(rr, f"{atlas}_gauss3", f"{atlas}_gauss3_randnbr", [])
             m1 = None if d1.empty else d1["mean"].iloc[0]
@@ -99,9 +102,9 @@ def score_xsess(df: pd.DataFrame, out: Out):
         a, b = eff.get((atlas, "half")), eff.get((atlas, "full"))
         out.rule(f"D3 density {atlas}", None if a is None or b is None else a > b,
                  f"soft - hard at half {_fmt(a)} vs full {_fmt(b)} (predict half > full)")
-    a, b = eff.get(("schaefer400", "full")), eff.get(("destrieux", "full"))
+    a, b = eff.get(("schaefer1000", "full")), eff.get(("schaefer400", "full"))
     out.rule("D3 resolution", None if a is None or b is None else a > b,
-             f"soft - hard schaefer400 {_fmt(a)} vs destrieux {_fmt(b)} at full (predict schaefer400 >)")
+             f"soft - hard schaefer1000 {_fmt(a)} vs schaefer400 {_fmt(b)} at full (predict schaefer1000 >)")
     out("\n(For information only, after the rules) test AUC per person, mean over seeds:\n")
     t = df.pivot_table(index=["density", "spatial"], columns="subject", values="auc", aggfunc="mean")
     out(t.round(3).to_string(), fence=True)
@@ -113,18 +116,20 @@ def score_xsubj(df: pd.DataFrame, out: Out):
         out("No runs yet.\n")
         return
     df = df.copy()
-    df["size"] = df["fold"].str.rsplit("_", n=1).str[1]
+    df["size"] = df["density"]
     r = _run_level(df, ["fold", "size"])
     out(f"{len(r)} runs. Validation AUC (last epoch), mean over folds and seeds:\n")
     out(r.pivot_table(index="spatial", columns="size", values="val_last", aggfunc="mean")
         .round(4).to_string(), fence=True)
     eff = {}
     for atlas in ATLASES:
-        for size in ("full", "small"):
+        for size in ("k2", "k5"):
             rr = r[r["size"] == size]
             sub = rr[rr["spatial"].str.startswith(atlas + "_")]
-            out.rule(f"F0 {atlas}/{size}", len(sub) == 16 and sub["esc_early"].sum() >= 12,
-                     f"{int(sub['esc_early'].sum())}/{len(sub)} runs leave the plateau by epoch {EARLY} (need >= 12/16)")
+            ok = len(sub) > 0 and sub["esc_early"].mean() >= F0_XSUBJ
+            out.rule(f"F0 {atlas}/{size}", ok,
+                     f"{int(sub['esc_early'].sum())}/{len(sub)} runs leave the plateau by epoch {EARLY} "
+                     f"(need >= {F0_XSUBJ:.0%})")
             for name, a, b in (("D1 soft - hard", f"{atlas}_gauss3", f"{atlas}_hard"),
                                ("D4 equal coverage", f"{atlas}_gauss3_nearest", f"{atlas}_hard_nearest")):
                 d = _diff(rr, a, b, ["fold"])
@@ -138,15 +143,15 @@ def score_xsubj(df: pd.DataFrame, out: Out):
                 out.rule(f"{name} {atlas}/{size}", pooled > 0,
                          f"{_fmt(pooled)} (per fold: {per_fold}; {int(d['n_pos'].sum())}/{int(d['n'].sum())} runs > 0)")
     for atlas in ATLASES:
-        a, b = eff.get((atlas, "small")), eff.get((atlas, "full"))
-        out.rule(f"D3 density {atlas}", None if a is None or b is None else a > b,
-                 f"soft - hard with 2 training people {_fmt(a)} vs 5 {_fmt(b)} (predict small > full)")
+        a, b = eff.get((atlas, "k2")), eff.get((atlas, "k5"))
+        out.rule(f"D3 density {atlas}", None,
+                 f"soft - hard with 2 training people {_fmt(a)} vs 5 {_fmt(b)} (reported; no fixed prediction)")
     if "frac_unknown_test" in df.columns:
         out("\nHeld-out weight on regions training never saw (mean):\n")
         out(df.drop_duplicates("run").pivot_table(index="spatial", columns="size", values="frac_unknown_test",
                                                   aggfunc="mean").round(3).to_string(), fence=True)
     out("\n(For information only, after the rules) test AUC of the held-out person, mean over seeds:\n")
-    out(df.pivot_table(index="spatial", columns="fold", values="auc", aggfunc="mean").round(3).to_string(), fence=True)
+    out(df.pivot_table(index=["density", "spatial"], columns="fold", values="auc", aggfunc="mean").round(3).to_string(), fence=True)
 
 
 def main(argv=None):

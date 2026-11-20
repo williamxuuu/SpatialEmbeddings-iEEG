@@ -1,7 +1,9 @@
 # Experiment 2, Phase 0 (part 1, cross-session): soft vs hard under the v2
-# protocol, at a medium atlas (Destrieux) and a fine one (Schaefer 400), at two
-# electrode densities.
-# 7 settings x 2 densities x 3 seeds = 42 runs, recipe r2_stft_car (Phase 0 pick),
+# protocol, at two HIGH-resolution atlases (Schaefer 400 and 1000), at two
+# electrode densities. Low-resolution atlases are left out on purpose: soft
+# weights barely change coarse regions (reports/density_geometry.md: soft adds
+# +0.02 coverage for lobes vs +0.16 / +0.21 for Schaefer 400 / 1000 at 5 people).
+# 7 settings x 2 densities x 6 seeds = 84 runs, recipe r2_stft_car (Phase 0 pick),
 # 40 epochs, no early stopping, last epoch reported.
 #
 # Density: cross-session trains and tests on the SAME people (another session),
@@ -11,22 +13,22 @@
 # Caveat: fewer electrodes is also less input per person, so overall AUC drops;
 # the comparison that matters is soft - hard WITHIN each density.
 #
-# Why Schaefer 400: soft weights share data between neighbouring regions, which
-# should matter most where regions are sparse. In the old pilot's electrode set,
-# Destrieux had a median of 8 electrodes per region (16% of regions < 3);
-# Schaefer 400 had 4 (30% < 3). Prediction: soft - hard is larger for Schaefer 400.
+# Why these atlases: soft weights share data between neighbouring regions, which
+# should matter most where regions are sparse. With all 6 people's electrodes,
+# Schaefer 400 has a median of 4 electrodes per occupied region (31% < 3) and
+# Schaefer 1000 has 2 (54% < 3). Prediction: soft - hard is larger for 1000.
 #
-# This is a feasibility and effect-size check, not a significance test: with
-# 3 seeds the smallest detectable difference is ~0.05 AUC, while a realistic
+# This is a feasibility and effect-size check, not a significance test: even with
+# 6 seeds the smallest detectable difference is ~0.035 AUC, while a realistic
 # soft-vs-hard gain is ~0.01-0.02. Rules, written before running, scored by
 # softRegionTesting/phase0_soft_report.py on validation AUC at the last epoch
 # (val_last: mean over the 6 people), averaged over seeds; per atlas x density:
-#   F0 feasibility: >= 8/9 of the hard / soft / soft_randnbr runs leave the plateau
+#   F0 feasibility: >= 89% of the hard / soft / soft_randnbr runs leave the plateau
 #      (train loss < ln2 - 0.02 by epoch 10).
 #   D1 direction:   soft - hard > 0.
 #   D2 neighbours:  soft - soft_randnbr > 0.
 #   D3 density:     soft - hard is larger at half than at full (per atlas), and
-#      larger for schaefer400 than destrieux (at full).
+#      larger for schaefer1000 than schaefer400 (at full).
 #   Report effects and seed SD of each difference; Phase 1 seeds are sized from
 #   these. Per-person TEST AUC is printed after the rules, for information only.
 #
@@ -46,13 +48,13 @@ overrides:
 axes:
   spatial:
     none:                        {spatial.type: none}
-    destrieux_hard:              {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard}
-    destrieux_gauss3:            {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
-    destrieux_gauss3_randnbr:    {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+    schaefer1000_hard:           {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: hard}
+    schaefer1000_gauss3:         {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    schaefer1000_gauss3_randnbr: {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
     schaefer400_hard:            {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
     schaefer400_gauss3:          {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
     schaefer400_gauss3_randnbr:  {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
   density:
     full: {data.electrode_frac: 1.0}
     half: {data.electrode_frac: 0.5}
-  seed: [0, 1, 2]
+  seed: [0, 1, 2, 3, 4, 5]
