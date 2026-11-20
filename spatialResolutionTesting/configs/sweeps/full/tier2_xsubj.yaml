@@ -1,7 +1,8 @@
 # Tier 2 (xsubj): fills in the resolution curve (Schaefer 100/1000, 40/10/5 mm
-# cubes) and the soft-width curve (Destrieux Gaussian sigma 1.5/2/5 mm, 10 mm ball),
-# speech + onset, 3 seeds. Run after Tier 1; analyse together with it
-# (same encodings names space, same protocol). 324 runs.
+# cubes) and a 3-point soft-width curve: Destrieux Gaussian sigma 1.5 and 6 mm,
+# with sigma 3 mm from Tier 1. Run the width rows ONLY if Tier 1 shows
+# destrieux_gauss3 beats hard destrieux; after a null result at 3 mm, searching
+# other widths would be fishing. Speech + onset, 3 seeds. 252 runs.
 config: configs/neuroprobe_v2.yaml
 exp_name: tier2_xsubj
 overrides:
@@ -66,21 +67,11 @@ axes:
       spatial.atlas: destrieux
       spatial.mode: gaussian
       spatial.sigma_mm: 1.5
-    destrieux_gauss2:
+    destrieux_gauss6:
       spatial.type: region
       spatial.atlas: destrieux
       spatial.mode: gaussian
-      spatial.sigma_mm: 2
-    destrieux_gauss5:
-      spatial.type: region
-      spatial.atlas: destrieux
-      spatial.mode: gaussian
-      spatial.sigma_mm: 5
-    destrieux_sphere10:
-      spatial.type: region
-      spatial.atlas: destrieux
-      spatial.mode: sphere
-      spatial.radius_mm: 10
+      spatial.sigma_mm: 6
   seed:
   - 0
   - 1

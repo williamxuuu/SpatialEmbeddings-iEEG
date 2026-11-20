@@ -61,7 +61,7 @@ exists. Change them only with a dated note saying why.
 |---|---|---|---|---|
 | 0 | `phase0_recipe.yaml` | 45 | Pick the recipe (front end, reference, readout) on validation data | `phase0_report.py` picks a recipe that leaves the plateau in ≥8/9 runs; copy it into `neuroprobe_v2.yaml` |
 | 1 | `full/full_xsess.yaml`, `full/full_xsubj.yaml` | 260 + 540 | The paper: 13-15 encodings, speech + onset, both cross-session directions, LOSO | none (analyse) |
-| 2 | `full/tier2_*.yaml` | 108 + 324 | Finer resolution curve, soft-width (σ) curve | after Phase 1 |
+| 2 | `full/tier2_*.yaml` | 84 + 252 | Finer resolution curve; soft width σ = 1.5 / 6 mm (with Tier 1's 3 mm) | after Phase 1; width rows only if Tier 1's gauss3 beats hard |
 | 3 | `full/tier3_*.yaml` | 216 + 648 | Task dependence (delta_volume, volume, word_index, global_flow) | optional |
 | 4 | `full/tier4_*.yaml` | 216 + 90 + 90 + 216 | Robustness: localization jitter, Lite electrodes, CNN front end, linear model | after Phase 1 |
 
