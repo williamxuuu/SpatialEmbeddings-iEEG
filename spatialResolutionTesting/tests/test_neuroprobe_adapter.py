@@ -185,3 +185,25 @@ def test_pilot_sweep_lines_run_and_report(fake_root, tmp_path):
         out = subprocess.run([sys.executable, "scripts/pilot_report.py", str(tmp_path / "res" / jobs[0]["overrides"]["exp_name"])],
                              capture_output=True, text=True, check=True).stdout
         assert "Gate 1" in out and "Does Lite hold up" in out
+
+
+def test_electrode_frac_keeps_a_fixed_subset(fake_root, tmp_path):
+    from locemb.data import build_data
+    root, raw = fake_root
+    full = build_data(_cfg(root, tmp_path, electrodes="all", split="cross_session"), seed=0)
+    a = build_data(_cfg(root, tmp_path, electrodes="all", split="cross_session", electrode_frac=0.5), seed=0)
+    b = build_data(_cfg(root, tmp_path, electrodes="all", split="cross_session", electrode_frac=0.5), seed=3)
+    for sid, info in full.subjects.items():
+        sa, sb = a.subjects[sid].electrode_names, b.subjects[sid].electrode_names
+        assert sa == sb                                  # training seed does not change it
+        assert set(sa) < set(info.electrode_names)        # strict subset
+        assert len(sa) == max(1, round(0.5 * len(info.electrode_names)))
+        assert sa == [e for e in info.electrode_names if e in set(sa)]   # original order
+    # windows read the kept electrodes' rows
+    info, ds = a.subjects["btb04"], a.test.datasets[0]
+    x = ds[0]["x"].numpy()
+    for row, e in enumerate(info.electrode_names):
+        assert abs(x[row, 0] - (100 * (raw[4].index(e) + 1) + np.floor(ds.starts[0] / SF))) < 1.0
+    c = build_data(_cfg(root, tmp_path, electrodes="all", split="cross_session", electrode_frac=0.5,
+                        electrode_subset_seed=1), seed=0)
+    assert any(c.subjects[s].electrode_names != a.subjects[s].electrode_names for s in a.subjects)

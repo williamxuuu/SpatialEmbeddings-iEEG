@@ -17,8 +17,9 @@
 # location uncertainty, soft - hard is similar at both sizes.
 #
 # Feasibility and effect-size check, not a significance test (2 seeds, 2 people).
-# Rules, written before running (validation AUC, last epoch):
-#   F0 feasibility: >= 6/8 runs leave the plateau per atlas x size.
+# Rules, written before running, scored by softRegionTesting/phase0_soft_report.py
+# on validation AUC at the last epoch, averaged over folds and seeds; per atlas x size:
+#   F0 feasibility: >= 12/16 runs leave the plateau (train loss < ln2 - 0.02 by epoch 10).
 #   D1 direction:   soft - hard > 0 per atlas, averaged over folds.
 #   D3 density:     (soft - hard) at small > at full, per atlas.
 #   D4 coverage:    gauss3_nearest - hard_nearest > 0 per atlas.

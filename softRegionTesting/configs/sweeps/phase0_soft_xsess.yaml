@@ -1,7 +1,15 @@
 # Experiment 2, Phase 0 (part 1, cross-session): soft vs hard under the v2
-# protocol, at a medium atlas (Destrieux) and a fine one (Schaefer 400).
-# 7 settings x 3 seeds = 21 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs,
-# no early stopping, last epoch reported.
+# protocol, at a medium atlas (Destrieux) and a fine one (Schaefer 400), at two
+# electrode densities.
+# 7 settings x 2 densities x 3 seeds = 42 runs, recipe r2_stft_car (Phase 0 pick),
+# 40 epochs, no early stopping, last epoch reported.
+#
+# Density: cross-session trains and tests on the SAME people (another session),
+# so the only way to thin the data per region is to drop electrodes. "half" keeps
+# a fixed random 50% of each person's electrodes (data.electrode_frac; the subset
+# depends only on the person, so every encoding and seed sees the same one).
+# Caveat: fewer electrodes is also less input per person, so overall AUC drops;
+# the comparison that matters is soft - hard WITHIN each density.
 #
 # Why Schaefer 400: soft weights share data between neighbouring regions, which
 # should matter most where regions are sparse. In the old pilot's electrode set,
@@ -10,15 +18,17 @@
 #
 # This is a feasibility and effect-size check, not a significance test: with
 # 3 seeds the smallest detectable difference is ~0.05 AUC, while a realistic
-# soft-vs-hard gain is ~0.01-0.02. Rules, written before running (validation AUC,
-# last epoch, mean over seeds and the 6 test people):
-#   F0 feasibility: every soft/hard run leaves the plateau (train loss < ln2 - 0.02
-#      by epoch 10) in >= 8/9 runs per atlas.
-#   D1 direction:   soft - hard > 0 for each atlas, in >= 4/6 people.
-#   D2 neighbours:  soft - soft_randnbr > 0 for each atlas, in >= 4/6 people.
-#   D3 density:     (soft - hard) for schaefer400 > (soft - hard) for destrieux.
-#   Report the measured effects and per-person seed SD; Phase 1 seeds are sized
-#   from these. None of D1-D3 is a go/no-go on its own.
+# soft-vs-hard gain is ~0.01-0.02. Rules, written before running, scored by
+# softRegionTesting/phase0_soft_report.py on validation AUC at the last epoch
+# (val_last: mean over the 6 people), averaged over seeds; per atlas x density:
+#   F0 feasibility: >= 8/9 of the hard / soft / soft_randnbr runs leave the plateau
+#      (train loss < ln2 - 0.02 by epoch 10).
+#   D1 direction:   soft - hard > 0.
+#   D2 neighbours:  soft - soft_randnbr > 0.
+#   D3 density:     soft - hard is larger at half than at full (per atlas), and
+#      larger for schaefer400 than destrieux (at full).
+#   Report effects and seed SD of each difference; Phase 1 seeds are sized from
+#   these. Per-person TEST AUC is printed after the rules, for information only.
 #
 # Paths below are relative to spatialResolutionTesting/, where every job runs.
 config: configs/neuroprobe_v2.yaml
@@ -42,4 +52,7 @@ axes:
     schaefer400_hard:            {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
     schaefer400_gauss3:          {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
     schaefer400_gauss3_randnbr:  {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+  density:
+    full: {data.electrode_frac: 1.0}
+    half: {data.electrode_frac: 0.5}
   seed: [0, 1, 2]

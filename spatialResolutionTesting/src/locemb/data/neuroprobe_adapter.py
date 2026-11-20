@@ -195,6 +195,13 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     which = d.get("electrodes", "lite")
     if which not in ("lite", "all"):
         raise ValueError(f"data.electrodes must be lite or all, not {which!r}")
+    # Data-density knob: keep a fixed random fraction of each person's electrodes.
+    # The subset depends only on (subject, electrode_subset_seed), never on the
+    # training seed or the spatial setting, so every encoding sees the same electrodes.
+    efrac = float(d.get("electrode_frac", 1.0))
+    if not 0.0 < efrac <= 1.0:
+        raise ValueError(f"data.electrode_frac must be in (0, 1], not {efrac}")
+    esub_seed = int(d.get("electrode_subset_seed", 0))
     pairs = [(int(s), int(t)) for s, t in d["subject_trials"]]
     lite_pairs = set(npc.NEUROPROBE_LITE_SUBJECT_TRIALS)
     for p in pairs:
@@ -230,6 +237,11 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                           if e in subj.electrode_labels]
             else:
                 labels = list(subj.electrode_labels)
+            if efrac < 1.0:
+                rng = np.random.default_rng(zlib.crc32(f"elec_{s}_{esub_seed}".encode()))
+                n_keep = max(1, int(round(efrac * len(labels))))
+                keep = set(rng.choice(len(labels), size=n_keep, replace=False).tolist())
+                labels = [e for i, e in enumerate(labels) if i in keep]   # original order
             all_xyz = np.asarray(subj.get_electrode_coordinates(), dtype=np.float64)
             pos = {e: i for i, e in enumerate(subj.electrode_labels)}
             xyz = all_xyz[[pos[e] for e in labels]]
@@ -333,6 +345,6 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     return DataBundle(ConcatDataset(trains), ConcatDataset(vals), ConcatDataset(tests),
                       infos, train_subjects=train_sids, sfreq=float(sfreq),
                       n_classes=max(2, n_classes),
-                      description=f"neuroprobe {eval_name} {split} electrodes={which} "
+                      description=f"neuroprobe {eval_name} {split} electrodes={which} frac={efrac:g} "
                                   f"reref={reref} zscore={zmode}"
                                   + (f" laplacian_unreferenced={n_unref}" if n_unref else ""))
