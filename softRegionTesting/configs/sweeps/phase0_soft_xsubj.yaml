@@ -1,0 +1,55 @@
+# Experiment 2, Phase 0 (part 2, cross-subject): soft vs hard on people the
+# model never saw, at two training-data sizes.
+# 8 settings x 4 folds x 2 seeds = 64 runs, recipe r2_stft_car.
+#
+# Folds: held-out subject 2 or 3 (as in phase0_xsubj; 7 is near chance for every
+# model), trained on
+#   full:  the other 5 people
+#   small: 2 people (1 and 4), so fewer electrodes per region and more of the
+#          held-out person's weight on regions training never saw.
+# The *_nearest rows map unseen regions to the nearest seen one, so soft and
+# hard are also compared at equal coverage. random-neighbour controls are in
+# phase0_soft_xsess only (cost).
+#
+# Prediction if soft works by sharing data between neighbours: soft - hard is
+# larger for small than for full, and larger for schaefer400 than destrieux,
+# and survives the equal-coverage (_nearest) comparison. If it instead encodes
+# location uncertainty, soft - hard is similar at both sizes.
+#
+# Feasibility and effect-size check, not a significance test (2 seeds, 2 people).
+# Rules, written before running (validation AUC, last epoch):
+#   F0 feasibility: >= 6/8 runs leave the plateau per atlas x size.
+#   D1 direction:   soft - hard > 0 per atlas, averaged over folds.
+#   D3 density:     (soft - hard) at small > at full, per atlas.
+#   D4 coverage:    gauss3_nearest - hard_nearest > 0 per atlas.
+#   Report effects and seed SD; they size Phase 1.
+#
+# Paths below are relative to spatialResolutionTesting/, where every job runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: phase0_soft_xsubj
+overrides:
+  results_dir: ../softRegionTesting/results
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.electrodes: all
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+axes:
+  fold:
+    heldout2_full:  {data.test_subjects: [2], data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]}
+    heldout2_small: {data.test_subjects: [2], data.subject_trials: [[1, 2], [2, 4], [4, 1]]}
+    heldout3_full:  {data.test_subjects: [3], data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]}
+    heldout3_small: {data.test_subjects: [3], data.subject_trials: [[1, 2], [3, 1], [4, 1]]}
+  spatial:
+    destrieux_hard:             {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard}
+    destrieux_gauss3:           {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    destrieux_hard_nearest:     {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard, spatial.unseen: nearest_seen}
+    destrieux_gauss3_nearest:   {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.unseen: nearest_seen}
+    schaefer400_hard:           {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    schaefer400_gauss3:         {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    schaefer400_hard_nearest:   {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard, spatial.unseen: nearest_seen}
+    schaefer400_gauss3_nearest: {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.unseen: nearest_seen}
+  seed: [0, 1]

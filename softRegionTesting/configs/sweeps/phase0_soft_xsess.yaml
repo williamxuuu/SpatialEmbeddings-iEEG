@@ -1,0 +1,45 @@
+# Experiment 2, Phase 0 (part 1, cross-session): soft vs hard under the v2
+# protocol, at a medium atlas (Destrieux) and a fine one (Schaefer 400).
+# 7 settings x 3 seeds = 21 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs,
+# no early stopping, last epoch reported.
+#
+# Why Schaefer 400: soft weights share data between neighbouring regions, which
+# should matter most where regions are sparse. In the old pilot's electrode set,
+# Destrieux had a median of 8 electrodes per region (16% of regions < 3);
+# Schaefer 400 had 4 (30% < 3). Prediction: soft - hard is larger for Schaefer 400.
+#
+# This is a feasibility and effect-size check, not a significance test: with
+# 3 seeds the smallest detectable difference is ~0.05 AUC, while a realistic
+# soft-vs-hard gain is ~0.01-0.02. Rules, written before running (validation AUC,
+# last epoch, mean over seeds and the 6 test people):
+#   F0 feasibility: every soft/hard run leaves the plateau (train loss < ln2 - 0.02
+#      by epoch 10) in >= 8/9 runs per atlas.
+#   D1 direction:   soft - hard > 0 for each atlas, in >= 4/6 people.
+#   D2 neighbours:  soft - soft_randnbr > 0 for each atlas, in >= 4/6 people.
+#   D3 density:     (soft - hard) for schaefer400 > (soft - hard) for destrieux.
+#   Report the measured effects and per-person seed SD; Phase 1 seeds are sized
+#   from these. None of D1-D3 is a go/no-go on its own.
+#
+# Paths below are relative to spatialResolutionTesting/, where every job runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: phase0_soft_xsess
+overrides:
+  results_dir: ../softRegionTesting/results
+  model.name: transformer
+  data.split: cross_session
+  data.eval_name: speech
+  data.electrodes: all
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+axes:
+  spatial:
+    none:                        {spatial.type: none}
+    destrieux_hard:              {spatial.type: region, spatial.atlas: destrieux, spatial.mode: hard}
+    destrieux_gauss3:            {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    destrieux_gauss3_randnbr:    {spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+    schaefer400_hard:            {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    schaefer400_gauss3:          {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    schaefer400_gauss3_randnbr:  {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+  seed: [0, 1, 2]
