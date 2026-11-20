@@ -1,0 +1,27 @@
+# Phase 0, part 2: do the spectral recipes also learn on people the model never
+# saw? 3 recipes x 2 spatial x 2 held-out subjects x 2 seeds = 24 runs.
+# Leave-one-subject-out folds for subjects 2 and 3 (7 is near chance for every
+# leaderboard model, so it can't show learning). Same recipe names as
+# phase0_recipe.yaml. Rule (scripts/phase0_report.py, written before running):
+# the recipe picked on cross-session validation must also leave the loss
+# plateau (train loss < ln2 - 0.02 by epoch 10) in >= 6/8 of its runs here;
+# if it doesn't, take the next eligible recipe that does.
+config: configs/neuroprobe_v2.yaml
+exp_name: phase0_xsubj
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+axes:
+  recipe:
+    r2_stft_car:      {model.frontend: stft, preprocess.zscore: session, preprocess.reref: car,       model.readout: cls}
+    r3_stft_lap:      {model.frontend: stft, preprocess.zscore: session, preprocess.reref: laplacian, model.readout: cls}
+    r4_stft_lap_mean: {model.frontend: stft, preprocess.zscore: session, preprocess.reref: laplacian, model.readout: mean}
+  fold:
+    heldout2: {data.test_subjects: [2]}
+    heldout3: {data.test_subjects: [3]}
+  spatial:
+    none:      {spatial.type: none}
+    destrieux: {spatial.type: region, spatial.atlas: destrieux}
+  seed: [0, 1]

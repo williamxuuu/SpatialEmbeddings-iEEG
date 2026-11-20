@@ -1,7 +1,7 @@
 """Apply the Phase 0 recipe rule (written in configs/sweeps/phase0_recipe.yaml
 before any run) and print which recipe to copy into configs/neuroprobe_v2.yaml.
 
-    python scripts/phase0_report.py results/phase0_recipe
+    python scripts/phase0_report.py results/phase0_recipe --xsubj results/phase0_xsubj
 
 Uses VALIDATION data only for the decision (val mean-subject AUC at the last
 epoch). Test AUCs are printed for information, after the decision.
@@ -25,6 +25,8 @@ def main(argv=None):
     ap.add_argument("results", nargs="+")
     ap.add_argument("--min-escaped", type=int, default=8, help="of 9 runs per recipe")
     ap.add_argument("--escape-by", type=int, default=10, help="epoch")
+    ap.add_argument("--xsubj", help="results of phase0_xsubj (cross-subject check)")
+    ap.add_argument("--min-escaped-xsubj", type=int, default=6, help="of 8 runs per recipe")
     a = ap.parse_args(argv)
     df = load_runs(a.results)
     if df.empty:
@@ -41,9 +43,34 @@ def main(argv=None):
     if ok.empty:
         print("\nNO recipe leaves the plateau reliably. Do not launch the full run; look at the logs.")
         return 1
-    top = ok["val"].max()
-    pick = next(r for r in ok.index if ok.loc[r, "val"] >= top - TIE)
-    print(f"\nPICK: {pick} (val {ok.loc[pick, 'val']:.4f}; best eligible {top:.4f}; ties within {TIE} -> simpler)")
+    xs_ok = None
+    if a.xsubj:
+        xr = load_runs([a.xsubj]).drop_duplicates("run")
+        xr = xr.assign(esc_early=xr["escape_epoch"].notna() & (xr["escape_epoch"] <= a.escape_by))
+        xg = xr.groupby("recipe").agg(n=("run", "size"), escaped=("esc_early", "sum"),
+                                      val=("val_last", "mean"))
+        print("\nCross-subject check (validation only):\n" + xg.round(4).to_string())
+        xs_ok = set(xg.index[xg["escaped"] >= a.min_escaped_xsubj])
+    # Rank eligible recipes: best validation first, ties within TIE -> simpler (earlier in ORDER).
+    ranked = []
+    rest = list(ok.index)
+    while rest:
+        top = max(ok.loc[r, "val"] for r in rest)
+        nxt = next(r for r in rest if ok.loc[r, "val"] >= top - TIE)
+        ranked.append(nxt); rest.remove(nxt)
+    pick = None
+    for r in ranked:
+        if xs_ok is None:
+            pick = r; break
+        if r in xs_ok:
+            pick = r; break
+        why = "not in the cross-subject check" if r not in xg.index else "stalls on new people"
+        print(f"skip {r}: best on cross-session but {why}")
+    if pick is None:
+        print("\nNO recipe passes both checks. Do not launch the full run; look at the logs.")
+        return 1
+    print(f"\nPICK: {pick} (val {ok.loc[pick, 'val']:.4f}; ties within {TIE} -> simpler"
+          + ("; passes the cross-subject check)" if xs_ok is not None else "; no cross-subject check given)"))
     by_sp = runs.pivot_table(index="recipe", columns="spatial", values="val_last", aggfunc="mean")
     print("\nValidation AUC by recipe x spatial:\n" + by_sp.reindex(g.index).round(4).to_string())
     t = df.groupby(["recipe", "spatial"])["auc"].mean().unstack()

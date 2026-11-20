@@ -59,7 +59,7 @@ exists. Change them only with a dated note saying why.
 
 | Phase | Sweep(s) | Runs | Purpose | Gate to continue |
 |---|---|---|---|---|
-| 0 | `phase0_recipe.yaml` | 45 | Pick the recipe (front end, reference, readout) on validation data | `phase0_report.py` picks a recipe that leaves the plateau in ≥8/9 runs; copy it into `neuroprobe_v2.yaml` |
+| 0 | `phase0_recipe.yaml` + `phase0_xsubj.yaml` | 45 + 24 | Pick the recipe (front end, reference, readout) on validation data; check it also learns on new people | `phase0_report.py`: leaves the plateau in ≥8/9 cross-session and ≥6/8 cross-subject runs; copy it into `neuroprobe_v2.yaml` |
 | 1 | `full/full_xsess.yaml`, `full/full_xsubj.yaml` | 260 + 540 | The paper: 13-15 encodings, speech + onset, both cross-session directions, LOSO | none (analyse) |
 | 2 | `full/tier2_*.yaml` | 84 + 252 | Finer resolution curve; soft width σ = 1.5 / 6 mm (with Tier 1's 3 mm) | after Phase 1; width rows only if Tier 1's gauss3 beats hard |
 | 3 | `full/tier3_*.yaml` | 216 + 648 | Task dependence (delta_volume, volume, word_index, global_flow) | optional |
