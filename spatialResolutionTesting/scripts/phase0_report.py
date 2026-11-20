@@ -10,6 +10,7 @@ epoch). Test AUCs are printed for information, after the decision.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
@@ -27,7 +28,13 @@ def main(argv=None):
     ap.add_argument("--escape-by", type=int, default=10, help="epoch")
     ap.add_argument("--xsubj", help="results of phase0_xsubj (cross-subject check)")
     ap.add_argument("--min-escaped-xsubj", type=int, default=6, help="of 8 runs per recipe")
+    ap.add_argument("--json", help="also write the decision here (used by scripts/phase0_gate.py)")
     a = ap.parse_args(argv)
+
+    def out(pick, why):
+        if a.json:
+            with open(a.json, "w") as fh:
+                json.dump({"pick": pick, "why": why}, fh)
     df = load_runs(a.results)
     if df.empty:
         sys.exit("no finished runs")
@@ -42,6 +49,7 @@ def main(argv=None):
     ok = g[g["escaped"] >= a.min_escaped]
     if ok.empty:
         print("\nNO recipe leaves the plateau reliably. Do not launch the full run; look at the logs.")
+        out(None, "no recipe leaves the plateau in enough cross-session runs")
         return 1
     xs_ok = None
     if a.xsubj:
@@ -68,9 +76,11 @@ def main(argv=None):
         print(f"skip {r}: best on cross-session but {why}")
     if pick is None:
         print("\nNO recipe passes both checks. Do not launch the full run; look at the logs.")
+        out(None, "no cross-session-eligible recipe also learns cross-subject")
         return 1
     print(f"\nPICK: {pick} (val {ok.loc[pick, 'val']:.4f}; ties within {TIE} -> simpler"
           + ("; passes the cross-subject check)" if xs_ok is not None else "; no cross-subject check given)"))
+    out(pick, "passes" + (" both checks" if xs_ok is not None else " the cross-session check"))
     by_sp = runs.pivot_table(index="recipe", columns="spatial", values="val_last", aggfunc="mean")
     print("\nValidation AUC by recipe x spatial:\n" + by_sp.reindex(g.index).round(4).to_string())
     t = df.groupby(["recipe", "spatial"])["auc"].mean().unstack()
