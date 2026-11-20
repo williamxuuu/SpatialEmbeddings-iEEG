@@ -1,22 +1,26 @@
 # Density x resolution
 
 **Question.** Does the best spatial resolution for electrode-location embeddings
-depend on how much training data there is? Prediction: with more training people,
+depend on how many electrodes each region gets? Prediction: with denser regions,
 finer resolution pays off, and the best cube size shrinks.
 
 This is the paper's main relationship. Earlier work compares a few fixed scales
 (BaRISTA: channel / parcel / lobe, parcel best) but never crosses scale with data
-amount. A literature check (Nov 2026; `../reports/Spatial encoding resolution prior work.md`,
+density. A literature check (Nov 2026; `../reports/Spatial encoding resolution prior work.md`,
 notes in `../research_notes/Density resolution deep dive/`) found no iEEG, EEG or
 spiking-model paper that does; residual risk is a follow-up from BaRISTA's lab.
 
-## Why cross-subject, why cubes
+## Why cross-subject, why cubes, why thinning
 
 - **Cross-subject only.** In cross-session the same electrodes are in training and
   test, so a finer code just acts like an electrode ID; no tradeoff is expected.
-  With a held-out person, a fine cell only helps if training people had electrodes there.
-- **Cubes, not atlases.** Cube side h is a pure resolution knob with no anatomy, and it
-  maps onto the theory directly. Atlases are the follow-up.
+- **Cubes, not atlases.** Cube side h is a pure resolution knob with no anatomy.
+- **Thin training electrodes, keep 5 people.** The first design varied the number of
+  training people (1/2/5); that mostly changed coverage, not electrodes per region,
+  because electrodes come in shafts. It was replaced (before running) by keeping all
+  5 training people and randomly thinning their electrodes to 10%
+  (`data.train_electrode_frac`); the held-out person keeps all electrodes.
+  `reports/density_geometry.md` and the sweep header have the measured numbers.
 
 ## Theory (what to cite, what it predicts)
 
@@ -39,14 +43,12 @@ octaves (d = 3 to 1). Hence half-octave cube sizes.
 
 | axis | values |
 |---|---|
-| held-out person | all 6 (leave-one-subject-out) |
-| training people k | 1, 2, 5 (nested subsets; who is drawn changes with seed) |
-| encoding | none; cubes 80, 57, 40, 28, 20, 14, 10, 5 mm |
-| seed | 0-5 (also sets who is drawn for k = 1, 2) |
+| held-out person | all 6 (leave-one-subject-out), trained on the other 5 |
+| density | e100 (all training electrodes), e10 (random 10%, redrawn per seed) |
+| encoding | none; cubes 80, 40, 20, 10, 5 mm |
+| seed | 0-23 |
 
-972 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs, last epoch.
-Knobs: `data.n_train_subjects`, `data.train_subset_seed` (cross-subject),
-`data.electrode_frac` (cross-session, used by Experiment 2).
+1728 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs, last epoch.
 
 ## Analysis (`scripts/analyze_density.py`, fixed before running)
 
@@ -56,22 +58,22 @@ gain(h) = AUC(cube h) - AUC(none), paired on person, density and seed.
   slope(k=5) - slope(k=1). Permutation test (density labels within person x seed);
   population-level sign-flip over 6 people as secondary.
 - **H2:** pooled vertex regression gain ~ x + x^2 + s + xs + x^2 s (x = log2(80/h),
-  s = log2 k): how many octaves finer the optimum moves per doubling of people,
+  s = log2 density level): how many octaves finer the optimum moves per doubling of people,
   bootstrap CI over people. Theory: 0.2-0.33.
 - **H3 (mechanism):** leave-one-person-out R^2 of gain ~ x * coverage, with and without
   density. If density adds nothing, it acts through coverage.
 
 Figure: gain vs cube size per k, and gain vs coverage.
 
-**Power** (simulated at Phase 0's cross-subject run SD 0.059): with 6 seeds the
-primary test detects the interaction with power 0.78 when the k=5 peak gain is
-~0.06 AUC (vertex shift: 0.93); at ~0.03 power is only 0.2-0.5. 2 seeds would give
-0.15. Table in the sweep header.
+**Power** (simulated at Phase 0's cross-subject run SD 0.059, best size moving
+0.25 octave per doubling of electrodes): e10 vs e100 with 24 seeds detects a 0.03 AUC
+peak gain with power 0.80 (H1) / 0.95 (H2); e25 would give 0.38 / 0.65. Table in the
+sweep header.
 
 ## Run
 
 ```bash
-LOCEMB_PER_TASK=3 bash slurm/submit_sweep.sh configs/sweeps/density_resolution.yaml 8 --time=06:00:00
+LOCEMB_PER_TASK=8 bash slurm/submit_sweep.sh configs/sweeps/density_resolution.yaml 16 --time=16:00:00   # 500-job QOS limit
 python scripts/analyze_density.py results/density_resolution --noise-only   # seed SD only
 python scripts/analyze_density.py results/density_resolution               # full analysis
 ```

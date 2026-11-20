@@ -1,56 +1,57 @@
-# Density x resolution: does the best spatial resolution depend on how much
-# training data there is? (the paper's main relationship)
+# Density x resolution: does the best spatial resolution depend on how many
+# electrodes each region gets? (the paper's main relationship)
 #
-# Cross-subject (the model must generalize to a new person's electrodes; in
+# Cross-subject: the model must generalize to a new person's electrodes (in
 # cross-session the same electrodes are in train and test, so finer just means
 # "more like an electrode ID" and no tradeoff is expected).
-#   resolution: none + cubes of side 80, 57, 40, 28, 20, 14, 10, 5 mm (a pure
-#               resolution knob, no anatomy; atlases are the follow-up). Half-octave
-#               steps from 80 to 10 mm: variance-only theory (h* ~ n^(-1/(d+2)))
-#               predicts the optimum moves < 1 octave between 1 and 5 people, so
-#               octave steps alone could miss it.
-#   density:    k = 1, 2 or 5 training people (nested subsets: the k=1 person is
-#               inside the k=2 pair, inside all 5; who is drawn changes with seed)
+#   people:     train on all 5 other people, test on the held-out one
+#   density:    e100 = all of each TRAINING person's electrodes; e10 = a random 10%
+#               (data.train_electrode_frac; the held-out person keeps all of theirs;
+#               the subset changes with seed via data.train_electrode_seed)
+#   resolution: none + cubes of side 80, 40, 20, 10, 5 mm (pure resolution knob,
+#               no anatomy; atlases are the follow-up)
 #   fold:       leave-one-subject-out over all 6 Neuroprobe Lite people (n = 6)
-#   seed:       6 (also sets which people are drawn for k = 1, 2)
-# 6 folds x 3 densities x 9 encodings x 6 seeds = 972 runs, recipe r2_stft_car.
+# 6 folds x 2 densities x 6 encodings x 24 seeds = 1728 runs, recipe r2_stft_car.
 #
-# Measured before running (MNI coords, all electrodes): electrodes per occupied
-# cube barely changes with k (20 mm: median 3.5 at k=1, 4.3 at k=5) because
-# electrodes cluster on shafts, but COVERAGE does (share of the held-out person's
-# electrodes in a cube some training person occupied, 20 mm: 0.34 / 0.58 / 0.83
-# for k = 1 / 2 / 5; 5 mm: 0.04 / 0.08 / 0.18). So density should act mainly
-# through coverage.
+# Why thin electrodes instead of dropping people (the first design, 1/2/5 people,
+# cancelled 2026-11-20 before running): the user's axis is electrodes per region,
+# with the representative 5 people kept. Dropping people mostly changed coverage
+# (20 mm: 0.34 with 1 person, 0.74 with 5) because electrodes come in shafts.
+# Measured from coordinates (5 training people, mean over held-out people and
+# 6 thinning draws), e10 vs e100:
+#   cube   electrodes per occupied cube   coverage of held-out person
+#   80 mm        10.4 vs 104                   1.00 vs 1.00
+#   40 mm         2.6 vs 16.7                  0.85 vs 0.92
+#   20 mm         1.0 vs 4.4                   0.43 vs 0.74
+#   10 mm         1.0 vs 2.0                   0.11 vs 0.44
+#    5 mm         1.0 vs 1.0                   0.02 vs 0.12
+# So 10% thins electrodes per cube at every size AND lowers coverage at <= 20 mm;
+# H3 separates the two. (25% is cleaner but under-powered, see below.) Each
+# training person keeps 11-24 electrodes at 10%.
+#
+# Power (simulated, Phase 0 cross-subject run SD 0.059, best size shifting 0.25
+# octave per doubling of electrodes; H1 / H2 power at peak gain 0.03 / 0.05 AUC):
+#   e25 vs e100, 12 seeds:  0.23/0.35  0.63/0.72
+#   e25 vs e100, 24 seeds:  0.38/0.65  0.85/0.93
+#   e10 vs e100, 12 seeds:  0.57/0.70  0.93/1.00
+#   e10 vs e100, 16 seeds:  0.60/0.85  0.98/0.98
+#   e10 vs e100, 24 seeds:  0.80/0.95  1.00/1.00   <- chosen
+# 9 half-octave cube sizes instead of 5 did not help at equal runs.
 #
 # Analysis, fixed before running (scripts/analyze_density.py; outcome = test AUC
 # of the held-out person at the last epoch):
-#   gain(h) = AUC(cube h) - AUC(none), same person, density and seed; mean over seeds.
-#   H1 (primary): per person and density, slope of gain on log2(80 / h) (how much
-#      each halving of cube size helps). Interaction = slope(k=5) - slope(k=1).
-#      Prediction: > 0 (finer resolution pays off more with more data).
-#      Primary test: permutation of density labels within each person x seed
-#      (statistic = mean slope difference; valid for these 6 people). Population-
-#      level secondary: exact sign-flip over the 6 people (smallest p = 0.031).
-#      Chosen before running from a power simulation at Phase 0's cross-subject
-#      noise: the sign-flip alone has < 0.2 power unless the effect is large.
-#   H2: how far the best cube size moves. Pooled fit over people x density x h:
-#      gain ~ 1 + x + x^2 + s + x*s + x^2*s, x = log2(80 / h), s = log2 k; optimum
-#      x*(s) = vertex; report dx*/ds (octaves finer per doubling of training people)
-#      with a bootstrap over people. Prediction: > 0; variance-only theory gives
-#      1/(d+2) = 0.2-0.33. Also per-density argmax and quadratic vertex, descriptive.
-#   H3 (mechanism): across all person x density x h cells, does gain depend on k
-#      once coverage is known? Fit gain ~ log2 h * coverage, then add k; report how
-#      much k adds (leave-one-person-out R^2). If little: density works through coverage.
-#
-# Seeds: 6, from a power simulation at Phase 0's cross-subject noise (run SD 0.059;
-# 40-60 simulated experiments per cell, coverage-driven effect):
-#   seeds   runs   peak k=5 gain 0.03: H1 / H2    0.06: H1 / H2
-#     2      324        ~0.0 / 0.20                0.15 / 0.52
-#     4      648        0.17 / 0.35                0.38 / 0.85
-#     6      972        0.23 / 0.50                0.78 / 0.93
-#     8     1296        0.33 / 0.55                0.78 / 1.00
-# (H1 = permutation test p < 0.05; H2 = bootstrap CI of the vertex shift above 0.)
-# 6 is where power at 0.06 stops improving. Effects near 0.03 stay hard to detect.
+#   gain(h) = AUC(cube h) - AUC(none), same person, density and seed.
+#   H1 (primary): slope of gain on log2(80 / h) (how much each halving of cube size
+#      helps); interaction = slope(e100) - slope(e10). Prediction: > 0 (finer
+#      resolution pays off more when regions have more electrodes). Permutation test
+#      of density labels within person x seed; sign-flip over the 6 people as the
+#      population-level version (smallest possible p = 0.031).
+#   H2: pooled vertex regression gain ~ 1 + x + x^2 + s + x s + x^2 s,
+#      x = log2(80 / h), s = log2(density level): octaves finer the optimum moves per
+#      doubling of electrodes; bootstrap CI over people. Theory h* ~ n^(-1/(d+2)):
+#      0.2-0.33 per doubling, i.e. 0.66-1.1 octaves between e10 and e100.
+#   H3 (mechanism): leave-one-person-out R^2 of gain ~ x * coverage, with and without
+#      density. Density adding beyond coverage = an electrodes-per-region effect.
 #
 # Paths below are relative to spatialResolutionTesting/, where every job runs.
 config: configs/neuroprobe_v2.yaml
@@ -74,23 +75,37 @@ axes:
     ho07: {data.test_subjects: [7]}
     ho10: {data.test_subjects: [10]}
   density:
-    k1: {data.n_train_subjects: 1}
-    k2: {data.n_train_subjects: 2}
-    k5: {data.n_train_subjects: 5}
+    e10:  {data.train_electrode_frac: 0.1}
+    e100: {data.train_electrode_frac: 1.0}
   spatial:
     none:   {spatial.type: none}
     grid80: {spatial.type: region, spatial.atlas: grid80}
-    grid57: {spatial.type: region, spatial.atlas: grid57}
     grid40: {spatial.type: region, spatial.atlas: grid40}
-    grid28: {spatial.type: region, spatial.atlas: grid28}
     grid20: {spatial.type: region, spatial.atlas: grid20}
-    grid14: {spatial.type: region, spatial.atlas: grid14}
     grid10: {spatial.type: region, spatial.atlas: grid10}
     grid5:  {spatial.type: region, spatial.atlas: grid5}
   seed:
-    "0": {seed: 0, data.train_subset_seed: 0}
-    "1": {seed: 1, data.train_subset_seed: 1}
-    "2": {seed: 2, data.train_subset_seed: 2}
-    "3": {seed: 3, data.train_subset_seed: 3}
-    "4": {seed: 4, data.train_subset_seed: 4}
-    "5": {seed: 5, data.train_subset_seed: 5}
+    "0": {seed: 0, data.train_electrode_seed: 0}
+    "1": {seed: 1, data.train_electrode_seed: 1}
+    "2": {seed: 2, data.train_electrode_seed: 2}
+    "3": {seed: 3, data.train_electrode_seed: 3}
+    "4": {seed: 4, data.train_electrode_seed: 4}
+    "5": {seed: 5, data.train_electrode_seed: 5}
+    "6": {seed: 6, data.train_electrode_seed: 6}
+    "7": {seed: 7, data.train_electrode_seed: 7}
+    "8": {seed: 8, data.train_electrode_seed: 8}
+    "9": {seed: 9, data.train_electrode_seed: 9}
+    "10": {seed: 10, data.train_electrode_seed: 10}
+    "11": {seed: 11, data.train_electrode_seed: 11}
+    "12": {seed: 12, data.train_electrode_seed: 12}
+    "13": {seed: 13, data.train_electrode_seed: 13}
+    "14": {seed: 14, data.train_electrode_seed: 14}
+    "15": {seed: 15, data.train_electrode_seed: 15}
+    "16": {seed: 16, data.train_electrode_seed: 16}
+    "17": {seed: 17, data.train_electrode_seed: 17}
+    "18": {seed: 18, data.train_electrode_seed: 18}
+    "19": {seed: 19, data.train_electrode_seed: 19}
+    "20": {seed: 20, data.train_electrode_seed: 20}
+    "21": {seed: 21, data.train_electrode_seed: 21}
+    "22": {seed: 22, data.train_electrode_seed: 22}
+    "23": {seed: 23, data.train_electrode_seed: 23}

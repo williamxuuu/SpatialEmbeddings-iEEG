@@ -56,7 +56,7 @@ def test_density_through_coverage(tmp_path):
 
 def test_null(tmp_path):
     t = _run(synth(lambda x, c, k: 0.01 * x, noise=0.01), tmp_path)
-    m = float(t.split("Interaction slope(k=5) - slope(k=1) = ")[1].split(" ")[0])
+    m = float(t.split("Interaction slope(k5) - slope(k1) = ")[1].split(" ")[0])
     assert abs(m) < 0.01
     ps = [ad.perm_test(synth(lambda x, c, k: 0.01 * x, noise=0.05, seed=r), n_perm=500)[1] for r in range(40)]
     assert 0.0 <= np.mean(np.array(ps) < 0.05) <= 0.15          # ~5% false positives

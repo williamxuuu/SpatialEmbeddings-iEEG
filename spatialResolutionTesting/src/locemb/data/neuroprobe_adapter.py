@@ -202,6 +202,17 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     if not 0.0 < efrac <= 1.0:
         raise ValueError(f"data.electrode_frac must be in (0, 1], not {efrac}")
     esub_seed = int(d.get("electrode_subset_seed", 0))
+    # Training-only density knob (cross-subject): keep a fixed random fraction of each
+    # TRAINING person's electrodes; the held-out person keeps all of theirs. Thins
+    # electrodes per region while the number of people stays fixed. The subset depends
+    # only on (person, train_electrode_seed), never on the spatial setting.
+    tfrac = float(d.get("train_electrode_frac", 1.0))
+    if not 0.0 < tfrac <= 1.0:
+        raise ValueError(f"data.train_electrode_frac must be in (0, 1], not {tfrac}")
+    if tfrac < 1.0 and split != "cross_subject":
+        raise ValueError("data.train_electrode_frac only applies to split=cross_subject")
+    held_out = {int(x) for x in d.get("test_subjects", [])} if split == "cross_subject" else set()
+    tsub_seed = int(d.get("train_electrode_seed", 0))
     pairs = [(int(s), int(t)) for s, t in d["subject_trials"]]
     lite_pairs = set(npc.NEUROPROBE_LITE_SUBJECT_TRIALS)
     for p in pairs:
@@ -242,6 +253,11 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                 n_keep = max(1, int(round(efrac * len(labels))))
                 keep = set(rng.choice(len(labels), size=n_keep, replace=False).tolist())
                 labels = [e for i, e in enumerate(labels) if i in keep]   # original order
+            if tfrac < 1.0 and s not in held_out:
+                rng = np.random.default_rng(zlib.crc32(f"telec_{s}_{tsub_seed}".encode()))
+                n_keep = max(1, int(round(tfrac * len(labels))))
+                keep = set(rng.choice(len(labels), size=n_keep, replace=False).tolist())
+                labels = [e for i, e in enumerate(labels) if i in keep]
             all_xyz = np.asarray(subj.get_electrode_coordinates(), dtype=np.float64)
             pos = {e: i for i, e in enumerate(subj.electrode_labels)}
             xyz = all_xyz[[pos[e] for e in labels]]
@@ -366,6 +382,6 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     return DataBundle(ConcatDataset(trains), ConcatDataset(vals), ConcatDataset(tests),
                       infos, train_subjects=train_sids, sfreq=float(sfreq),
                       n_classes=max(2, n_classes),
-                      description=f"neuroprobe {eval_name} {split} electrodes={which} frac={efrac:g} "
+                      description=f"neuroprobe {eval_name} {split} electrodes={which} frac={efrac:g} train_frac={tfrac:g} "
                                   f"reref={reref} zscore={zmode}"
                                   + (f" laplacian_unreferenced={n_unref}" if n_unref else ""))

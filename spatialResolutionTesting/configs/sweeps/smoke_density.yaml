@@ -1,5 +1,5 @@
 # Smoke test for density_resolution: real data, 2 epochs, 4 runs. Checks the
-# n_train_subjects knob, grid cubes and the analysis end to end. Not a result.
+# train_electrode_frac knob, grid cubes and the analysis end to end. Not a result.
 config: configs/neuroprobe_v2.yaml
 exp_name: smoke_density
 overrides:
@@ -18,8 +18,8 @@ axes:
   fold:
     ho03: {data.test_subjects: [3]}
   density:
-    k1: {data.n_train_subjects: 1}
-    k5: {data.n_train_subjects: 5}
+    e10:  {data.train_electrode_frac: 0.1}
+    e100: {data.train_electrode_frac: 1.0}
   spatial:
     none:   {spatial.type: none}
     grid20: {spatial.type: region, spatial.atlas: grid20}

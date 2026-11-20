@@ -226,3 +226,24 @@ def test_n_train_subjects_nested_subsets(fake_root, tmp_path):
     assert picks[(2, 0)] == full
     with pytest.raises(ValueError):
         build_data(_cfg(root, tmp_path, n_train_subjects=3, **base), seed=0)
+
+
+def test_train_electrode_frac_thins_training_people_only(fake_root, tmp_path):
+    from locemb.data import build_data
+    root, raw = fake_root
+    base = dict(electrodes="all", split="cross_subject", test_subjects=[10],
+                subject_trials=[[4, 1], [7, 1], [10, 0]])
+    full = build_data(_cfg(root, tmp_path, **base), seed=0)
+    a = build_data(_cfg(root, tmp_path, train_electrode_frac=0.5, **base), seed=0)
+    b = build_data(_cfg(root, tmp_path, train_electrode_frac=0.5, **base), seed=7)
+    c = build_data(_cfg(root, tmp_path, train_electrode_frac=0.5, train_electrode_seed=1, **base), seed=0)
+    assert a.subjects["btb10"].electrode_names == full.subjects["btb10"].electrode_names   # held-out intact
+    for sid in ("btb04", "btb07"):
+        fa, sa = full.subjects[sid].electrode_names, a.subjects[sid].electrode_names
+        assert set(sa) < set(fa) and len(sa) == max(1, round(0.5 * len(fa)))
+        assert sa == b.subjects[sid].electrode_names                                     # not the training seed
+    assert any(c.subjects[s].electrode_names != a.subjects[s].electrode_names for s in ("btb04", "btb07"))
+    x = a.train.datasets[0][0]["x"]
+    assert x.shape[0] == len(a.subjects["btb04"].electrode_names) or x.shape[0] == len(a.subjects["btb07"].electrode_names)
+    with pytest.raises(ValueError):
+        build_data(_cfg(root, tmp_path, electrodes="all", split="cross_session", train_electrode_frac=0.5), seed=0)
