@@ -42,9 +42,9 @@ octaves (d = 3 to 1). Hence half-octave cube sizes.
 | held-out person | all 6 (leave-one-subject-out) |
 | training people k | 1, 2, 5 (nested subsets; who is drawn changes with seed) |
 | encoding | none; cubes 80, 57, 40, 28, 20, 14, 10, 5 mm |
-| seed | 0, 1 (stage 1; more by the staged rule) |
+| seed | 0-5 (also sets who is drawn for k = 1, 2) |
 
-324 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs, last epoch.
+972 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs, last epoch.
 Knobs: `data.n_train_subjects`, `data.train_subset_seed` (cross-subject),
 `data.electrode_frac` (cross-session, used by Experiment 2).
 
@@ -63,16 +63,16 @@ gain(h) = AUC(cube h) - AUC(none), paired on person, density and seed.
 
 Figure: gain vs cube size per k, and gain vs coverage.
 
-**Power** (simulated at Phase 0's cross-subject run SD 0.059): with 2 seeds the
-primary test detects the interaction only when the k=5 peak gain is >= ~0.06 AUC.
-Seeds are therefore staged: after stage 1, look only at the seed SD
-(`--noise-only`) and add seeds 2, 3 if needed.
+**Power** (simulated at Phase 0's cross-subject run SD 0.059): with 6 seeds the
+primary test detects the interaction with power 0.78 when the k=5 peak gain is
+~0.06 AUC (vertex shift: 0.93); at ~0.03 power is only 0.2-0.5. 2 seeds would give
+0.15. Table in the sweep header.
 
 ## Run
 
 ```bash
 LOCEMB_PER_TASK=3 bash slurm/submit_sweep.sh configs/sweeps/density_resolution.yaml 8 --time=06:00:00
-python scripts/analyze_density.py results/density_resolution --noise-only   # staged-seed rule
+python scripts/analyze_density.py results/density_resolution --noise-only   # seed SD only
 python scripts/analyze_density.py results/density_resolution               # full analysis
 ```
 

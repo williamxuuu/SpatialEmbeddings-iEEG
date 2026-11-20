@@ -12,8 +12,8 @@
 #   density:    k = 1, 2 or 5 training people (nested subsets: the k=1 person is
 #               inside the k=2 pair, inside all 5; who is drawn changes with seed)
 #   fold:       leave-one-subject-out over all 6 Neuroprobe Lite people (n = 6)
-#   seed:       2 (also sets which people are drawn for k = 1, 2)
-# 6 folds x 3 densities x 9 encodings x 2 seeds = 324 runs, recipe r2_stft_car.
+#   seed:       6 (also sets which people are drawn for k = 1, 2)
+# 6 folds x 3 densities x 9 encodings x 6 seeds = 972 runs, recipe r2_stft_car.
 #
 # Measured before running (MNI coords, all electrodes): electrodes per occupied
 # cube barely changes with k (20 mm: median 3.5 at k=1, 4.3 at k=5) because
@@ -42,12 +42,15 @@
 #      once coverage is known? Fit gain ~ log2 h * coverage, then add k; report how
 #      much k adds (leave-one-person-out R^2). If little: density works through coverage.
 #
-# Seeds, staged (rule fixed before running). Power simulation at Phase 0's
-# cross-subject noise (run SD 0.059): with 2 seeds the primary test detects an
-# interaction only if the k=5 peak gain is >= ~0.06 AUC. Stage 1 runs seeds 0-1.
-# Then compute ONLY the per-run seed SD of gain (scripts/analyze_density.py
-# --noise-only; never look at the effect first) and add seeds (next ones: 2, 3)
-# until the simulated power at peak gain 0.03 is >= 0.5 or seeds = 4.
+# Seeds: 6, from a power simulation at Phase 0's cross-subject noise (run SD 0.059;
+# 40-60 simulated experiments per cell, coverage-driven effect):
+#   seeds   runs   peak k=5 gain 0.03: H1 / H2    0.06: H1 / H2
+#     2      324        ~0.0 / 0.20                0.15 / 0.52
+#     4      648        0.17 / 0.35                0.38 / 0.85
+#     6      972        0.23 / 0.50                0.78 / 0.93
+#     8     1296        0.33 / 0.55                0.78 / 1.00
+# (H1 = permutation test p < 0.05; H2 = bootstrap CI of the vertex shift above 0.)
+# 6 is where power at 0.06 stops improving. Effects near 0.03 stay hard to detect.
 #
 # Paths below are relative to spatialResolutionTesting/, where every job runs.
 config: configs/neuroprobe_v2.yaml
@@ -87,3 +90,7 @@ axes:
   seed:
     "0": {seed: 0, data.train_subset_seed: 0}
     "1": {seed: 1, data.train_subset_seed: 1}
+    "2": {seed: 2, data.train_subset_seed: 2}
+    "3": {seed: 3, data.train_subset_seed: 3}
+    "4": {seed: 4, data.train_subset_seed: 4}
+    "5": {seed: 5, data.train_subset_seed: 5}
