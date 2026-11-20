@@ -19,5 +19,7 @@ pip install -e ".[dev,neuroprobe]"
 echo ">> caching brain atlases (compute nodes may have no internet)"
 LOCEMB_ATLAS_DIR="${LOCEMB_ATLAS_DIR:-$PWD/nilearn_data}" python scripts/fetch_atlases.py
 echo ">> running CPU tests"
-python -m pytest -q
+# Login nodes show every core but allow ~1 per user: without this, torch starts
+# one thread per core and the ~1-minute tests crawl for an hour.
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python -m pytest -q
 echo ">> done. Next: bash slurm/submit_sweep.sh configs/sweeps/smoke.yaml"

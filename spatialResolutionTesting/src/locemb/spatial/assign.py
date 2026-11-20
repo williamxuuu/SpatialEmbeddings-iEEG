@@ -33,6 +33,13 @@ Config block:
                               # that training did see (atlas source only)
       unseen_max_mm: 20
       dataset_label_key: destrieux   # for source=dataset_labels
+      jitter_mm: 0            # localization-error test: add N(0, jitter_mm) mm to each
+                              # coordinate axis before anything else (fixed per seed)
+
+    type: electrode_id        # control: one learned vector per ELECTRODE (no anatomy,
+                              # no sharing). An identity tag: in cross-session it can
+                              # do everything a fine atlas can do; in cross-subject the
+                              # test people's electrodes are all <unknown>.
 """
 
 from __future__ import annotations
@@ -193,8 +200,21 @@ def _nearest_seen(spec: dict, xyz: np.ndarray, index: dict, max_mm: float):
     return None
 
 
+def jitter_subjects(subjects: dict, jitter_mm: float, seed: int) -> dict:
+    """Copies of the subjects with every electrode moved by N(0, jitter_mm) mm per axis."""
+    import dataclasses
+    out = {}
+    for sid, s in subjects.items():
+        rng = np.random.default_rng([seed, 7919, *map(ord, sid)])
+        xyz = np.asarray(s.coords, dtype=np.float64)
+        out[sid] = dataclasses.replace(s, coords=xyz + rng.normal(0, jitter_mm, xyz.shape))
+    return out
+
+
 def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: int = 0) -> Assignment:
     sp_type = spec.get("type", "none")
+    if float(spec.get("jitter_mm", 0) or 0) > 0:
+        subjects = jitter_subjects(subjects, float(spec["jitter_mm"]), seed)
     k = int(spec.get("topk", 8)) if sp_type == "region" else 1
 
     if sp_type in ("none", "coords"):
@@ -202,13 +222,19 @@ def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: i
                        "w": torch.zeros(s.n_electrodes, 1),
                        "coords": torch.as_tensor(np.asarray(s.coords), dtype=torch.float32)}
                  for sid, s in subjects.items()}
-        return Assignment([UNKNOWN], table, {"n_regions": 0, "type": sp_type})
-    if sp_type != "region":
+        return Assignment([UNKNOWN], table, {"n_regions": 0, "type": sp_type,
+                                             "jitter_mm": float(spec.get("jitter_mm", 0) or 0)})
+    if sp_type not in ("region", "electrode_id"):
         raise ValueError(f"Unknown spatial.type {sp_type!r}")
+    if sp_type == "electrode_id" and spec.get("control", "none") not in ("none", None):
+        raise ValueError("spatial.control does not apply to type=electrode_id")
 
     min_w = float(spec.get("min_weight", 0.05))
     votes = {}
     for sid, s in subjects.items():
+        if sp_type == "electrode_id":
+            votes[sid] = [[(f"{sid}:{nm}", 1.0)] for nm in s.electrode_names]
+            continue
         v = raw_votes(spec, s)
         if len(v) != s.n_electrodes:
             raise ValueError(f"{sid}: {len(v)} labels for {s.n_electrodes} electrodes")
@@ -293,7 +319,8 @@ def build_assignment(spec: dict, subjects: dict, fit_subjects: set[str], seed: i
         return float(sum((table[s]["w"] * (table[s]["idx"] == 0)).sum() for s in ids) / tot)
 
     stats = {
-        "type": "region",
+        "type": sp_type,
+        "jitter_mm": float(spec.get("jitter_mm", 0) or 0),
         "n_regions": len(vocab),
         "electrodes_per_region_median": float(np.median(region_counts)) if len(region_counts) else 0.0,
         "frac_regions_lt3_electrodes": float((region_counts < 3).mean()) if len(region_counts) else 0.0,

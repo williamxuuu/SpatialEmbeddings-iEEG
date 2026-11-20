@@ -55,7 +55,7 @@ def build_spatial_encoder(spec: dict, n_regions: int, d: int) -> nn.Module:
     t = spec.get("type", "none")
     if t == "none":
         return NoSpatial(d)
-    if t == "region":
+    if t in ("region", "electrode_id"):
         return RegionEncoder(n_regions, d)
     if t == "coords":
         return CoordEncoder(d, **spec.get("coords_kwargs", {}))

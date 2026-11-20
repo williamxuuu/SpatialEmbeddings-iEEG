@@ -6,7 +6,20 @@
     # one line of a sweep file (this is what each Slurm array task does)
     python -m locemb.train --sweep-file runs/exp1_resolution.jsonl --index 7
 
-Writes results/<exp_name>/<run_name>/{metrics.json, config.yaml, ckpt.pt}.
+Writes results/<exp_name>/<run_name>/{metrics.json, config.yaml, preds.npz, ckpt.pt}.
+
+Model selection (train.select):
+  best   test the epoch with the best validation AUC (validation = first half of
+         the test recording, Neuroprobe's convention)
+  last   test the final epoch. No test-person labels touch model selection.
+Both are always computed and saved (metrics["test_best"], metrics["test_last"]);
+`select` only decides which one fills the top-level test_auc.
+
+Early stopping: never before train.min_epochs; after that, stop when the
+validation AUC has not beaten its best by more than train.min_delta for
+train.patience epochs. The pilot (patience 8, no minimum) stopped most runs
+during the initial loss plateau (loss = ln 2 for 10-17 epochs), before the
+model had started to learn.
 If metrics.json already exists the run is skipped, so re-submitting a sweep
 only re-runs what failed. If ckpt.pt exists (job was killed / preempted)
 training resumes from it.
@@ -35,6 +48,18 @@ from .spatial import build_assignment
 from .utils import pick_device, set_seed, slurm_info, write_json
 
 
+def _one_thread_worker(_):
+    """DataLoader workers: one math thread each. Otherwise every worker starts a
+    full BLAS/OpenMP pool (7 workers x 8 threads on 8 CPUs), which slowed data
+    loading ~20x in the v2 smoke test."""
+    torch.set_num_threads(1)
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(1)
+    except ImportError:
+        pass
+
+
 def evaluate(model, loader, device, n_classes):
     model.eval()
     ys, ps, subs = [], [], []
@@ -54,6 +79,27 @@ def evaluate(model, loader, device, n_classes):
 
     out = {"auc": auc(y, p), "acc": float((p.argmax(1) == y).mean()), "n": int(len(y))}
     out["per_subject_auc"] = {s: auc(y[subs == s], p[subs == s]) for s in np.unique(subs)}
+    out["per_subject_acc"] = {s: float((p[subs == s].argmax(1) == y[subs == s]).mean())
+                              for s in np.unique(subs)}
+    vals = [v for v in out["per_subject_auc"].values() if not math.isnan(v)]
+    out["mean_subject_auc"] = float(np.mean(vals)) if vals else float("nan")
+    out["_y"], out["_p"], out["_subject"] = y, p, subs
+    return out
+
+
+def _public(ev: dict) -> dict:
+    return {k: v for k, v in ev.items() if not k.startswith("_")}
+
+
+def permuted_table(table: dict, seed: int) -> dict:
+    """The spatial table with each subject's electrodes shuffled among themselves:
+    every electrode gets another electrode's location code. Used at test time
+    only, to measure how much the trained model relies on location."""
+    rng = np.random.default_rng(seed + 4242)
+    out = {}
+    for sid, t in table.items():
+        perm = torch.from_numpy(rng.permutation(t["idx"].shape[0]))
+        out[sid] = {k: v[perm] for k, v in t.items()}
     return out
 
 
@@ -84,10 +130,12 @@ def run(cfg: dict) -> dict:
     mk = lambda ds, shuffle: DataLoader(ds, batch_size=tr.get("batch_size", 32), shuffle=shuffle,
                                         num_workers=nw, collate_fn=collate,
                                         pin_memory=device.type == "cuda",
-                                        persistent_workers=nw > 0, drop_last=False)
+                                        persistent_workers=nw > 0, drop_last=False,
+                                        worker_init_fn=_one_thread_worker if nw > 0 else None)
     train_dl, val_dl, test_dl = mk(bundle.train, True), mk(bundle.val, False), mk(bundle.test, False)
 
-    model = build_model(cfg, assign.n_regions, bundle.sfreq, bundle.n_classes).to(device)
+    n_samples = int(bundle.train[0]["x"].shape[-1])
+    model = build_model(cfg, assign.n_regions, bundle.sfreq, bundle.n_classes, n_samples).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     opt = torch.optim.AdamW(model.parameters(), lr=tr.get("lr", 1e-3),
                             weight_decay=tr.get("weight_decay", 1e-2))
@@ -108,11 +156,21 @@ def run(cfg: dict) -> dict:
         print(f"[resume] from epoch {start_epoch}", flush=True)
 
     patience = int(tr.get("patience", 8))
+    min_epochs = int(tr.get("min_epochs", 0))
+    min_delta = float(tr.get("min_delta", 0.0))
+    select = tr.get("select", "best")
+    if select not in ("best", "last"):
+        raise ValueError(f"train.select must be best or last, not {select!r}")
+    # Smoke tests only: stop each epoch after this many mini-batches (null = full epoch).
+    max_batches = tr.get("max_batches")
+    max_batches = int(max_batches) if max_batches else None
     loss_fn = torch.nn.CrossEntropyLoss()
     for epoch in range(start_epoch, epochs):
         model.train()
         tl, nb, te = 0.0, 0, time.time()
         for batch in train_dl:
+            if max_batches is not None and nb >= max_batches:
+                break
             b = {k: (v.to(device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in batch.items()}
             with torch.autocast(device.type, dtype=torch.bfloat16, enabled=use_amp):
                 loss = loss_fn(model(b).float(), b["y"])
@@ -123,29 +181,58 @@ def run(cfg: dict) -> dict:
             tl += loss.item(); nb += 1
         val = evaluate(model, val_dl, device, bundle.n_classes)
         history.append({"epoch": epoch, "train_loss": tl / max(1, nb), "val_auc": val["auc"],
-                        "sec": time.time() - te})
-        print(f"[epoch {epoch}] loss={tl / max(1, nb):.4f} val_auc={val['auc']:.4f} "
+                        "batches": nb, "sec": time.time() - te})
+        print(f"[epoch {epoch}] batches={nb} loss={tl / max(1, nb):.4f} val_auc={val['auc']:.4f} "
               f"({time.time() - te:.1f}s)", flush=True)
+        history[-1]["val_mean_subject_auc"] = val["mean_subject_auc"]
         score = val["auc"] if not math.isnan(val["auc"]) else val["acc"]
-        if score > best:
+        if score > best + min_delta:
             best, bad = score, 0
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            history[-1]["best"] = True
         else:
             bad += 1
         torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                     "epoch": epoch, "best": best, "best_state": best_state, "bad": bad,
                     "history": history}, ckpt_path)
-        if bad >= patience:
+        if bad >= patience and epoch + 1 >= min_epochs:
             print(f"[early stop] at epoch {epoch}", flush=True)
             break
 
+    test_last = evaluate(model, test_dl, device, bundle.n_classes)
+    last_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
     if best_state is not None:
         model.load_state_dict(best_state)
-    test = evaluate(model, test_dl, device, bundle.n_classes)
+    test_best = evaluate(model, test_dl, device, bundle.n_classes)
+    if select == "last":   # leave the model at its final epoch for the probe below
+        model.load_state_dict(last_state)
+    test = test_last if select == "last" else test_best
+
+    # How much does the trained model rely on location? Re-test with each
+    # subject's location codes shuffled among its electrodes.
+    probe = None
+    if cfg["spatial"].get("type", "none") != "none" and tr.get("location_probe", True):
+        pdl = DataLoader(bundle.test, batch_size=tr.get("batch_size", 32), shuffle=False,
+                         num_workers=nw, collate_fn=Collator(permuted_table(assign.table, seed)),
+                         worker_init_fn=_one_thread_worker if nw > 0 else None)
+        pe = evaluate(model, pdl, device, bundle.n_classes)
+        probe = {"auc": pe["auc"], "mean_subject_auc": pe["mean_subject_auc"],
+                 "per_subject_auc": pe["per_subject_auc"],
+                 "drop_mean_subject_auc": test["mean_subject_auc"] - pe["mean_subject_auc"]}
+
+    np.savez_compressed(os.path.join(out_dir, "preds.npz"),
+                        y=test_best["_y"], p_best=test_best["_p"][:, 1:].squeeze(-1) if bundle.n_classes == 2 else test_best["_p"],
+                        p_last=test_last["_p"][:, 1:].squeeze(-1) if bundle.n_classes == 2 else test_last["_p"],
+                        subject=test_best["_subject"])
     metrics = {
         "exp_name": cfg["exp_name"], "run_name": cfg["run_name"], "seed": seed,
+        "select": select,
         "test_auc": test["auc"], "test_acc": test["acc"], "test_n": test["n"],
-        "test_per_subject_auc": test["per_subject_auc"], "best_val": best,
+        "test_per_subject_auc": test["per_subject_auc"],
+        "test_mean_subject_auc": test["mean_subject_auc"],
+        "test_best": _public(test_best), "test_last": _public(test_last),
+        "location_probe": probe, "best_val": best,
+        "best_epoch": max([h["epoch"] for h in history if h.get("best")], default=None),
         "spatial": assign.stats, "n_params": n_params, "epochs_run": len(history),
         "runtime_sec": time.time() - t0, "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,
@@ -154,7 +241,9 @@ def run(cfg: dict) -> dict:
     write_json(metrics_path, metrics)
     if not cfg.get("keep_ckpt", False) and os.path.exists(ckpt_path):
         os.remove(ckpt_path)
-    print(f"[done] test_auc={test['auc']:.4f} test_acc={test['acc']:.4f} -> {metrics_path}", flush=True)
+    print(f"[done] select={select} test_auc={test['auc']:.4f} mean_subject_auc={test['mean_subject_auc']:.4f} "
+          f"(best-val {test_best['mean_subject_auc']:.4f} / last {test_last['mean_subject_auc']:.4f}) "
+          f"test_acc={test['acc']:.4f} -> {metrics_path}", flush=True)
     return metrics
 
 

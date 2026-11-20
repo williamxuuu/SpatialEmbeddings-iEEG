@@ -1,0 +1,26 @@
+# Real-data smoke sweep: 10 tiny runs (2 epochs x 20 mini-batches each) that go
+# through the same Slurm array path as the pilot. Covers all 7 pilot location
+# settings, both splits (cross_session, cross_subject) and both electrode sets.
+# AUCs mean nothing here; check with:
+#   python scripts/check_run.py results/smoke_real/* --expect-cuda --epochs 2
+config: configs/neuroprobe.yaml
+exp_name: smoke_real
+overrides:
+  model.name: transformer
+  train.epochs: 2
+  train.max_batches: 20
+  train.patience: 100
+  keep_ckpt: true
+  seed: 0
+axes:
+  case:
+    xsess_lite_none:        {data.split: cross_session, data.electrodes: lite, spatial.type: none}
+    xsess_lite_lobes:       {data.split: cross_session, data.electrodes: lite, spatial.type: region, spatial.atlas: lobes}
+    xsess_lite_ho:          {data.split: cross_session, data.electrodes: lite, spatial.type: region, spatial.atlas: ho}
+    xsess_lite_destrieux:   {data.split: cross_session, data.electrodes: lite, spatial.type: region, spatial.atlas: destrieux}
+    xsess_lite_schaefer400: {data.split: cross_session, data.electrodes: lite, spatial.type: region, spatial.atlas: schaefer400}
+    xsess_lite_coords:      {data.split: cross_session, data.electrodes: lite, spatial.type: coords}
+    xsess_lite_destrieux_shuffled: {data.split: cross_session, data.electrodes: lite, spatial.type: region, spatial.atlas: destrieux, spatial.control: shuffle_electrodes}
+    xsubj_all_none:         {data.split: cross_subject, data.electrodes: all, spatial.type: none}
+    xsubj_all_destrieux:    {data.split: cross_subject, data.electrodes: all, spatial.type: region, spatial.atlas: destrieux}
+    xsubj_all_schaefer400:  {data.split: cross_subject, data.electrodes: all, spatial.type: region, spatial.atlas: schaefer400}

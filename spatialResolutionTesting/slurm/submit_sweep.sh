@@ -3,6 +3,8 @@
 #   bash slurm/submit_sweep.sh configs/sweeps/exp1_resolution.yaml            # all runs
 #   bash slurm/submit_sweep.sh configs/sweeps/exp1_resolution.yaml 8          # at most 8 at once
 #   bash slurm/submit_sweep.sh configs/sweeps/exp1_resolution.yaml 8 --time=02:00:00   # extra sbatch flags
+#   LOCEMB_PER_TASK=4 bash slurm/submit_sweep.sh ...   # 4 runs one after another per array task
+#     (set --time to cover all of them: ~4x one run's time plus margin)
 # Finished runs are skipped automatically, so re-running this after failures
 # only redoes what's missing.
 set -euo pipefail
@@ -14,7 +16,9 @@ if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then MAXPAR="$1"; shift; fi
 source slurm/activate_env.sh
 read -r N FILE < <(python -m locemb.sweep "$SWEEP")
 mkdir -p logs
-ARGS=(--array="0-$((N-1))%${MAXPAR}" --job-name="$(basename "$FILE" .jsonl)")
+PER_TASK="${LOCEMB_PER_TASK:-1}"
+NTASK=$(( (N + PER_TASK - 1) / PER_TASK ))
+ARGS=(--array="0-$((NTASK-1))%${MAXPAR}" --job-name="$(basename "$FILE" .jsonl)")
 [ -n "${LOCEMB_ACCOUNT:-}" ]    && ARGS+=(--account="$LOCEMB_ACCOUNT")
 [ -n "${LOCEMB_QOS:-}" ]        && ARGS+=(--qos="$LOCEMB_QOS")
 [ -n "${LOCEMB_PARTITION:-}" ]  && ARGS+=(--partition="$LOCEMB_PARTITION")
@@ -23,6 +27,6 @@ ARGS=(--array="0-$((N-1))%${MAXPAR}" --job-name="$(basename "$FILE" .jsonl)")
 [ -n "${LOCEMB_TIME:-}" ]       && ARGS+=(--time="$LOCEMB_TIME")
 [ -n "${LOCEMB_CPUS:-}" ]       && ARGS+=(--cpus-per-task="$LOCEMB_CPUS")
 [ -n "${LOCEMB_MEM:-}" ]        && ARGS+=(--mem="$LOCEMB_MEM")
-echo ">> $N runs from $FILE"
-echo ">> sbatch ${ARGS[*]} $* slurm/array.sbatch $FILE"
-sbatch "${ARGS[@]}" "$@" slurm/array.sbatch "$FILE"
+echo ">> $N runs from $FILE in $NTASK array tasks ($PER_TASK per task)"
+echo ">> sbatch ${ARGS[*]} $* slurm/array.sbatch $FILE $PER_TASK $N"
+sbatch "${ARGS[@]}" "$@" slurm/array.sbatch "$FILE" "$PER_TASK" "$N"

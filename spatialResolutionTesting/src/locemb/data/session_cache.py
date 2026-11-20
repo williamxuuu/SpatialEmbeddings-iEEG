@@ -162,12 +162,35 @@ class SessionData:
             raise KeyError(f"{len(missing)} electrodes not in cache {self.path}: {missing[:5]}")
         return np.array([self.row[e] for e in labels])
 
+    def prefetch(self, chunk: int = 64 << 20) -> float:
+        """Read data.npy once, front to back, so the OS keeps it in memory.
+
+        Windows are read at random positions, and on network storage (PACE
+        scratch / Lustre) each cold random read costs ~0.5 s: 256 of them per
+        recording made a real-data job time out building its datasets, and they
+        made the pilot's first epoch take ~400 s. One sequential pass costs ~3 s
+        per recording (~460 MB/s) and makes later random reads ~1 ms. All 12 Lite
+        recordings at 512 Hz are ~15 GB. Returns seconds taken."""
+        t0 = time.time()
+        with open(os.path.join(self.path, "data.npy"), "rb", buffering=0) as f:
+            while f.read(chunk):
+                pass
+        return time.time() - t0
+
+    @property
+    def n_samples(self) -> int:
+        """Recording length at the cached rate."""
+        return int(self.meta["n_out"])
+
     def window(self, start_raw: int, n_out: int, rows: np.ndarray) -> np.ndarray:
         """`start_raw` is a sample index at the raw 2048 Hz rate (what Neuroprobe
         returns); `n_out` is the window length at the cached rate."""
+        return self.window_out(int(round(start_raw * self.ratio)), n_out, rows)
+
+    def window_out(self, j0: int, n_out: int, rows: np.ndarray) -> np.ndarray:
+        """Same, but `j0` is already a sample index at the cached rate."""
         self._open()
-        j0 = int(round(start_raw * self.ratio))
-        j0 = max(0, min(j0, self._arr.shape[1] - n_out))
+        j0 = max(0, min(int(j0), self._arr.shape[1] - n_out))
         a = np.asarray(self._arr[np.sort(rows), j0:j0 + n_out], dtype=np.float32)
         order = np.argsort(np.argsort(rows))
         return a[order] * self._scales[rows][:, None]

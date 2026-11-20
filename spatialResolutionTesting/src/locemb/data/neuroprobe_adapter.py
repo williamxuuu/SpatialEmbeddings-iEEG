@@ -43,6 +43,8 @@ test = second half (Neuroprobe's own convention).
 from __future__ import annotations
 
 import os
+import re
+import zlib
 
 import numpy as np
 import pandas as pd
@@ -50,22 +52,116 @@ import torch
 from torch.utils.data import ConcatDataset, Dataset
 
 from .base import DataBundle, SubjectInfo
-from .preprocess import WindowOps, filter_spec
+from .preprocess import WindowOps, filter_spec, zscore_mode
 from .session_cache import SessionData, build_session, default_cache_dir
 
 
 class CachedWindows(Dataset):
-    def __init__(self, session: SessionData, rows: np.ndarray, starts: np.ndarray,
-                 labels: np.ndarray, n_out: int, subject: str, ops: WindowOps):
-        self.session, self.rows, self.starts, self.labels = session, rows, starts, labels
+    """Windows of one cached recording.
+
+    `read_rows` are the cache rows read for each window; `mix` (E_out x E_read,
+    or None = identity) turns them into the channels the model sees. That is how
+    Laplacian re-referencing reaches shaft neighbours the model itself may not
+    see (e.g. a Lite electrode whose neighbour is outside the Lite set).
+    `stats` = per-channel (mean, sd) over the whole recording, for zscore=session.
+    """
+
+    def __init__(self, session: SessionData, read_rows: np.ndarray, starts: np.ndarray,
+                 labels: np.ndarray, n_out: int, subject: str, ops: WindowOps,
+                 mix: np.ndarray | None = None, stats=None):
+        self.session, self.rows, self.starts, self.labels = session, read_rows, starts, labels
         self.n_out, self.subject, self.ops = n_out, subject, ops
+        self.mix, self.stats = mix, stats
 
     def __len__(self):
         return len(self.labels)
 
     def __getitem__(self, i):
-        x = self.ops(self.session.window(int(self.starts[i]), self.n_out, self.rows))
-        return {"x": x, "y": int(self.labels[i]), "subject": self.subject}
+        a = self.session.window(int(self.starts[i]), self.n_out, self.rows)
+        if self.mix is not None:
+            a = self.mix @ a
+        return {"x": self.ops(a, self.stats), "y": int(self.labels[i]), "subject": self.subject}
+
+
+class SparseMix:
+    """A re-referencing matrix with few non-zeros per row (Laplacian: <= 3),
+    applied by indexing instead of a BLAS matrix product. Inside DataLoader
+    workers a dense `mix @ a` starts one BLAS thread pool per worker (7 workers x
+    8 threads on 8 cores in the smoke test), which made each window ~20x slower."""
+
+    def __init__(self, mix: np.ndarray):
+        k = max(1, int((mix != 0).sum(1).max()))
+        self.cols = np.zeros((mix.shape[0], k), dtype=np.int64)
+        self.w = np.zeros((mix.shape[0], k), dtype=np.float32)
+        for i, row in enumerate(mix):
+            nz = np.nonzero(row)[0]
+            self.cols[i, :len(nz)], self.w[i, :len(nz)] = nz, row[nz]
+        self.shape = mix.shape
+
+    def __matmul__(self, a: np.ndarray) -> np.ndarray:
+        return (a[self.cols] * self.w[..., None]).sum(1)
+
+
+_CONTACT = re.compile(r"^(.*?)(\d+)$")
+
+
+def laplacian_mix(labels: list[str], available: list[str]) -> tuple[list[str], np.ndarray, int]:
+    """Shaft Laplacian: each contact minus the mean of its neighbours (contact
+    number +-1 on the same shaft, e.g. F3aOF5 and F3aOF7 for F3aOF6) among the
+    `available` (usable) contacts. A contact with only one usable neighbour gets
+    a bipolar difference with it; with none it is left as is (counted, logged).
+    Neuroprobe's own Laplacian drops such contacts instead; we keep them so the
+    electrode set (and so the spatial codes) is the same in every preprocessing arm.
+
+    Returns (labels to read, mix matrix (len(labels) x len(read)), n_unreferenced).
+    """
+    avail = set(available)
+    read = list(labels)
+    pos = {e: i for i, e in enumerate(read)}
+    rows = []
+    n_none = 0
+    for e in labels:
+        m = _CONTACT.match(e)
+        nbrs = []
+        if m:
+            shaft, num = m.group(1), int(m.group(2))
+            nbrs = [f"{shaft}{num + d}" for d in (-1, 1) if f"{shaft}{num + d}" in avail]
+        for n in nbrs:
+            if n not in pos:
+                pos[n] = len(read); read.append(n)
+        rows.append((pos[e], [pos[n] for n in nbrs]))
+        n_none += not nbrs
+    mix = np.zeros((len(labels), len(read)), dtype=np.float32)
+    for i, (me, nb) in enumerate(rows):
+        mix[i, me] = 1.0
+        for j in nb:
+            mix[i, j] -= 1.0 / len(nb)
+    return read, mix, n_none
+
+
+def session_stats(sd: SessionData, rows: np.ndarray, mix: np.ndarray | None, ops: WindowOps,
+                  n_out: int, n_windows: int = 256, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    """Per-channel mean / SD of the re-referenced signal over one whole recording,
+    estimated from `n_windows` windows at fixed random positions (no labels used).
+    For the test recording this is unlabeled test-session data, as in
+    Neuroprobe's "global z-scoring" baselines."""
+    rng = np.random.default_rng(seed)
+    T = sd.n_samples
+    starts = rng.integers(0, max(1, T - n_out), size=n_windows)
+    s1 = s2 = None
+    n = 0
+    for j0 in np.sort(starts):
+        a = sd.window_out(int(j0), n_out, rows).astype(np.float64)
+        if mix is not None:
+            a = mix @ a
+        if ops.reref == "car":
+            a = a - a.mean(0, keepdims=True)
+        s1 = a.sum(1) if s1 is None else s1 + a.sum(1)
+        s2 = (a ** 2).sum(1) if s2 is None else s2 + (a ** 2).sum(1)
+        n += a.shape[1]
+    mu = s1 / n
+    var = np.maximum(s2 / n - mu ** 2, 0)
+    return mu.astype(np.float32), np.sqrt(var).astype(np.float32)
 
 
 def _indices(ds) -> tuple[np.ndarray, np.ndarray, int]:
@@ -116,7 +212,10 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
 
     def session(s: int, t: int) -> SessionData:
         if (s, t) not in sessions:
-            sessions[(s, t)] = SessionData(build_session(subjects_npb[s], t, spec, cache_dir, root))
+            sd = SessionData(build_session(subjects_npb[s], t, spec, cache_dir, root))
+            if d.get("prefetch", True):
+                print(f"[neuroprobe] prefetched sub {s} trial {t} in {sd.prefetch():.1f}s", flush=True)
+            sessions[(s, t)] = sd
         return sessions[(s, t)]
 
     infos: dict[str, SubjectInfo] = {}
@@ -150,6 +249,26 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             elec[s] = labels
         return infos[sid]
 
+    prep = cfg.get("preprocess") or {}
+    reref = prep.get("reref", "none")
+    zmode = zscore_mode(prep)
+    read_plan: dict[tuple[int, int], tuple] = {}
+    stats_cache: dict[tuple[int, int], tuple] = {}
+    n_unref: dict[str, int] = {}
+
+    def plan(s: int, t: int):
+        """(cache rows to read, mix matrix or None) for subject s, recording t."""
+        if (s, t) not in read_plan:
+            sd = session(s, t)
+            labels = elec[s]
+            if reref == "laplacian":
+                read, mix, n0 = laplacian_mix(labels, sd.labels)
+                n_unref[f"btb{s:02d}"] = n0
+                read_plan[(s, t)] = (sd.rows(read), SparseMix(mix))
+            else:
+                read_plan[(s, t)] = (sd.rows(labels), None)
+        return read_plan[(s, t)]
+
     def windows(s: int, t: int, ds, idx: np.ndarray | None = None) -> CachedWindows:
         starts, labels, n_raw = _indices(ds)
         if idx is not None:
@@ -157,7 +276,14 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
         sd = session(s, t)
         info = subject_info(s)
         n_out = int(round(n_raw * sd.ratio))
-        return CachedWindows(sd, sd.rows(elec[s]), starts, labels, n_out, info.subject_id, ops)
+        rows, mix = plan(s, t)
+        stats = None
+        if zmode == "session":
+            if (s, t) not in stats_cache:
+                stats_cache[(s, t)] = session_stats(sd, rows, mix, ops, n_out,
+                                                    seed=zlib.crc32(f"{s}_{t}".encode()))
+            stats = stats_cache[(s, t)]
+        return CachedWindows(sd, rows, starts, labels, n_out, info.subject_id, ops, mix, stats)
 
     trains, vals, tests, train_sids = [], [], [], set()
     kw = dict(eval_name=eval_name, lite=True, output_indices=True)
@@ -207,4 +333,6 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     return DataBundle(ConcatDataset(trains), ConcatDataset(vals), ConcatDataset(tests),
                       infos, train_subjects=train_sids, sfreq=float(sfreq),
                       n_classes=max(2, n_classes),
-                      description=f"neuroprobe {eval_name} {split} electrodes={which}")
+                      description=f"neuroprobe {eval_name} {split} electrodes={which} "
+                                  f"reref={reref} zscore={zmode}"
+                                  + (f" laplacian_unreferenced={n_unref}" if n_unref else ""))

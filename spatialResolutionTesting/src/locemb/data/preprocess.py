@@ -37,7 +37,10 @@ class Preprocessor:
         cfg = cfg or {}
         self.sfreq_in = float(sfreq)
         self.reref = cfg.get("reref", "none")
-        self.zscore = cfg.get("zscore", True)
+        self.zscore = zscore_mode(cfg)
+        if self.zscore == "session" or self.reref == "laplacian":
+            raise ValueError("zscore=session and reref=laplacian need whole recordings "
+                             "(Neuroprobe adapter), not per-window preprocessing")
         self.clip = cfg.get("clip", None)
         self.resample_hz = cfg.get("resample_hz", None)
         self.sfreq_out = float(self.resample_hz or sfreq)
@@ -68,7 +71,7 @@ class Preprocessor:
             a = signal.sosfiltfilt(self.sos, a, axis=-1)
         if self.resample_hz:
             a = signal.resample_poly(a, self.up, self.down, axis=-1)
-        if self.zscore:
+        if self.zscore == "window":
             a = (a - a.mean(-1, keepdims=True)) / (a.std(-1, keepdims=True) + 1e-6)
         if self.clip:
             a = np.clip(a, -self.clip, self.clip)
@@ -129,23 +132,58 @@ class SessionFilter:
         return a
 
 
+def zscore_mode(cfg: dict | None) -> str:
+    """preprocess.zscore -> "window" | "session" | "none".
+
+    window   each 1 s window, each electrode, scaled to mean 0 / SD 1 on its own.
+             This throws away how much louder an electrode is in this window than
+             usual: exactly the broadband / high-gamma power rise that marks
+             speech. On the Neuroprobe leaderboard, the same models lose ~0.1-0.2
+             AUC with per-window instead of global normalization.
+    session  each electrode scaled by its mean / SD over the whole recording
+             (after re-referencing). Keeps power changes between windows.
+    none     no scaling.
+    `true` means "window" (the old behaviour) so old configs read the same.
+    """
+    z = (cfg or {}).get("zscore", True)
+    if z is True or z == "window":
+        return "window"
+    if z in (False, None, "none"):
+        return "none"
+    if z == "session":
+        return "session"
+    raise ValueError(f"Unknown preprocess.zscore {z!r} (window | session | none)")
+
+
 class WindowOps:
-    """The per-window steps: re-reference, z-score, clip. Input (E, T) array."""
+    """The per-window steps: re-reference, z-score, clip. Input (E, T) array.
+
+    reref: none | car | laplacian. Laplacian (each contact minus the mean of its
+    neighbours on the same shaft) needs contacts the model may not see, so the
+    data adapter applies it before calling this (see neuroprobe_adapter.py);
+    here it is a no-op. zscore="session" needs per-electrode `stats`
+    (mean, sd) from the adapter.
+    """
 
     def __init__(self, cfg: dict | None):
         cfg = cfg or {}
         self.reref = cfg.get("reref", "none")
-        if self.reref not in ("none", None, "car"):
+        if self.reref not in ("none", None, "car", "laplacian"):
             raise ValueError(f"Unknown reref: {self.reref}")
-        self.zscore = cfg.get("zscore", True)
+        self.zscore = zscore_mode(cfg)
         self.clip = cfg.get("clip", None)
 
-    def __call__(self, a: np.ndarray) -> torch.Tensor:
+    def __call__(self, a: np.ndarray, stats: tuple[np.ndarray, np.ndarray] | None = None) -> torch.Tensor:
         a = np.asarray(a, dtype=np.float32)
         if self.reref == "car":
             a = a - a.mean(axis=0, keepdims=True)
-        if self.zscore:
+        if self.zscore == "window":
             a = (a - a.mean(-1, keepdims=True)) / (a.std(-1, keepdims=True) + 1e-6)
+        elif self.zscore == "session":
+            if stats is None:
+                raise ValueError("preprocess.zscore=session needs per-session stats from the data adapter")
+            mu, sd = stats
+            a = (a - mu[:, None]) / (sd[:, None] + 1e-6)
         if self.clip:
             a = np.clip(a, -self.clip, self.clip)
         return torch.from_numpy(np.ascontiguousarray(a, dtype=np.float32))

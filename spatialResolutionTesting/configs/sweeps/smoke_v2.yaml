@@ -1,0 +1,23 @@
+# GPU smoke for the post-pilot code paths: 8 tiny runs (2 epochs x 20
+# mini-batches) through the real Slurm array path, 4 runs per array task.
+# AUCs mean nothing. Check with:
+#   python scripts/check_run.py results/smoke_v2/* --expect-cuda --epochs 2
+config: configs/neuroprobe_v2.yaml
+exp_name: smoke_v2
+overrides:
+  model.name: transformer
+  train.epochs: 2
+  train.min_epochs: 2
+  train.max_batches: 20
+  keep_ckpt: true
+  seed: 0
+axes:
+  case:
+    xsess_stft_lap_destrieux:     {data.split: cross_session, spatial.type: region, spatial.atlas: destrieux}
+    xsess_stft_lap_mean_coordsjit: {data.split: cross_session, model.readout: mean, spatial.type: coords, spatial.jitter_mm: 2}
+    xsess_testA_gauss3:           {data.split: cross_session, data.subject_trials: [[1,1],[2,0],[3,0],[4,0],[7,0],[10,0]], spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    xsess_cnn_window_none:        {data.split: cross_session, model.frontend: cnn, preprocess.zscore: window, preprocess.reref: car, spatial.type: none}
+    xsubj_loso7_electrode_id:     {data.split: cross_subject, data.test_subjects: [7], data.subject_trials: [[1,2],[2,4],[3,1],[4,1],[7,1],[10,1]], spatial.type: electrode_id}
+    xsubj_loso3_gauss3_nearest:   {data.split: cross_subject, data.test_subjects: [3], data.subject_trials: [[1,2],[2,4],[3,1],[4,1],[7,1],[10,1]], spatial.type: region, spatial.atlas: destrieux, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.unseen: nearest_seen}
+    xsubj_loso2_hoprob_onset:     {data.split: cross_subject, data.eval_name: onset, data.test_subjects: [2], data.subject_trials: [[1,2],[2,4],[3,1],[4,1],[7,1],[10,1]], spatial.type: region, spatial.source: prob_atlas, spatial.atlas: ho_prob, spatial.mode: prob, spatial.sigma_mm: 0}
+    xsubj_linear_lite_ho:         {data.split: cross_subject, data.electrodes: lite, data.test_subjects: [10], data.subject_trials: [[1,2],[2,4],[3,1],[4,1],[7,1],[10,1]], model.name: linear, spatial.type: region, spatial.atlas: ho}

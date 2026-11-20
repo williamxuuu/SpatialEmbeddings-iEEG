@@ -38,8 +38,8 @@ class RegionPooledLinear(nn.Module):
             raise ValueError("Linear baseline supports spatial.type none or region, not coords")
         self.bp = BandPower(sfreq)
         self.F = len(self.bp.bands)
-        self.K = n_regions if spatial_type == "region" else 1
-        self.region = spatial_type == "region"
+        self.region = spatial_type in ("region", "electrode_id")
+        self.K = n_regions if self.region else 1
         self.norm = nn.LayerNorm(self.F, elementwise_affine=False)
         self.head = nn.Linear(self.K * self.F, n_classes)
 
