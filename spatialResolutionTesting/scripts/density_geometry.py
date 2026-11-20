@@ -65,7 +65,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=None, help="Brain Treebank root (default: config / $ROOT_DIR_BRAINTREEBANK)")
     ap.add_argument("--out", default=os.path.join(HERE, "..", "reports", "density_geometry"))
+    ap.add_argument("--from-csv", action="store_true", help="redraw tables/figure from <out>.csv")
     a = ap.parse_args(argv)
+    if a.from_csv:
+        return summarize(pd.read_csv(a.out + ".csv"), a.out)
     import yaml
     from locemb.spatial import assign
     root = a.root or yaml.safe_load(open(os.path.join(HERE, "..", "configs", "neuroprobe.yaml")))["data"].get("root") \
@@ -105,6 +108,10 @@ def main(argv=None):
     df = pd.DataFrame(rows)
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     df.to_csv(a.out + ".csv", index=False)
+    summarize(df, a.out)
+
+
+def summarize(df: pd.DataFrame, out: str):
 
     m = df.groupby(["encoding", "k"])[["n_regions", "e_per_region", "frac_lt3", "coverage"]].mean().unstack("k")
     order = ATLASES + [f"{x}_gauss3" for x in ATLASES] + [f"grid{h}" for h in CUBES]
@@ -121,7 +128,7 @@ def main(argv=None):
          "## Share of occupied regions with < 3 training electrodes\n", tab(m["frac_lt3"].round(2)),
          "## Coverage: held-out weight on regions training saw\n", tab(m["coverage"].round(3)),
          "## Coverage soft adds (gauss3 - hard)\n", tab(gain.round(3))]
-    with open(a.out + ".md", "w") as f:
+    with open(out + ".md", "w") as f:
         f.write("\n".join(L))
     print("\n".join(L))
 
@@ -139,7 +146,8 @@ def main(argv=None):
     ax[0].set_title("Finer resolution -> less coverage; more people -> more")
     ax[0].legend(fontsize=7)
     for k in KS:
-        ax[1].plot(m.reindex(ATLASES)[("n_regions", k)], gain[k], marker="o", label=f"k={k}")
+        pts = pd.DataFrame({"n": m.reindex(ATLASES)[("n_regions", k)], "g": gain[k]}).sort_values("n")
+        ax[1].plot(pts["n"], pts["g"], marker="o", label=f"k={k}")
     ax[1].set_xscale("log")
     ax[1].axhline(0, color="grey", lw=0.8)
     ax[1].set_xlabel("regions training occupies (log), atlases")
@@ -147,7 +155,7 @@ def main(argv=None):
     ax[1].set_title("Where soft weights can help")
     ax[1].legend()
     fig.tight_layout()
-    fig.savefig(a.out + ".png", dpi=150)
+    fig.savefig(out + ".png", dpi=150)
 
 
 if __name__ == "__main__":
