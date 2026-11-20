@@ -207,3 +207,22 @@ def test_electrode_frac_keeps_a_fixed_subset(fake_root, tmp_path):
     c = build_data(_cfg(root, tmp_path, electrodes="all", split="cross_session", electrode_frac=0.5,
                         electrode_subset_seed=1), seed=0)
     assert any(c.subjects[s].electrode_names != a.subjects[s].electrode_names for s in a.subjects)
+
+
+def test_n_train_subjects_nested_subsets(fake_root, tmp_path):
+    from locemb.data import build_data
+    root, _ = fake_root
+    base = dict(split="cross_subject", test_subjects=[10], subject_trials=[[4, 1], [7, 1], [10, 0]])
+    full = build_data(_cfg(root, tmp_path, **base), seed=0).train_subjects
+    picks = {}
+    for k in (1, 2):
+        for ss in (0, 1, 2, 3):
+            b = build_data(_cfg(root, tmp_path, n_train_subjects=k, train_subset_seed=ss, **base), seed=5)
+            picks[(k, ss)] = b.train_subjects
+            assert len(b.train_subjects) == k and b.train_subjects <= full and "btb10" not in b.train_subjects
+    for ss in (0, 1, 2, 3):
+        assert picks[(1, ss)] <= picks[(2, ss)]               # nested
+    assert len({frozenset(picks[(1, ss)]) for ss in (0, 1, 2, 3)}) > 1   # seed changes who
+    assert picks[(2, 0)] == full
+    with pytest.raises(ValueError):
+        build_data(_cfg(root, tmp_path, n_train_subjects=3, **base), seed=0)

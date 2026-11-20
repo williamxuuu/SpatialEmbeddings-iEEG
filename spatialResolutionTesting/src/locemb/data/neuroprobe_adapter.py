@@ -327,11 +327,32 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             v, te = _halves(len(ds))
             vals.append(windows(s, t, ds, v))
             tests.append(windows(s, t, ds, te))
-        for s, t in npc.NEUROPROBE_LITE_SUBJECT_TRIALS:
-            if s in test_subjects or s not in listed:
-                continue
+        def _excluded(s, t):
             movie = npc.BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{s}_{t}"]
-            if d.get("exclude_test_movie", True) and movie in test_movies:
+            return d.get("exclude_test_movie", True) and movie in test_movies
+
+        # Data-density knob: train on only k of the eligible people. Subsets are nested
+        # (one fixed random order per held-out set and train_subset_seed; take the first
+        # k), so k=1 is inside k=2, which is inside k=5, and the same subset is used for
+        # every spatial setting.
+        eligible = sorted({s for s, t in npc.NEUROPROBE_LITE_SUBJECT_TRIALS
+                           if s in listed and s not in test_subjects and not _excluded(s, t)})
+        chosen = set(eligible)
+        k = d.get("n_train_subjects")
+        if k is not None:
+            k = int(k)
+            if not 1 <= k <= len(eligible):
+                raise ValueError(f"data.n_train_subjects={k} but only {len(eligible)} eligible "
+                                 f"training people: {eligible}")
+            key = f"train_{sorted(test_subjects)}_{int(d.get('train_subset_seed', 0))}"
+            order = np.random.default_rng(zlib.crc32(key.encode())).permutation(eligible)
+            chosen = {int(x) for x in order[:k]}
+            print(f"[neuroprobe] training people (k={k}): {sorted(chosen)} of {eligible}")
+        for s, t in npc.NEUROPROBE_LITE_SUBJECT_TRIALS:
+            if s in test_subjects or s not in listed or s not in chosen:
+                continue
+            if _excluded(s, t):
+                movie = npc.BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{s}_{t}"]
                 print(f"[neuroprobe] skip train sub {s} trial {t}: same movie as a test session ({movie})")
                 continue
             ds = npb.BrainTreebankSubjectTrialBenchmarkDataset(subjects_npb[s], t, torch.float32, **kw)

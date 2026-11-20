@@ -1,0 +1,89 @@
+# Density x resolution: does the best spatial resolution depend on how much
+# training data there is? (the paper's main relationship)
+#
+# Cross-subject (the model must generalize to a new person's electrodes; in
+# cross-session the same electrodes are in train and test, so finer just means
+# "more like an electrode ID" and no tradeoff is expected).
+#   resolution: none + cubes of side 80, 57, 40, 28, 20, 14, 10, 5 mm (a pure
+#               resolution knob, no anatomy; atlases are the follow-up). Half-octave
+#               steps from 80 to 10 mm: variance-only theory (h* ~ n^(-1/(d+2)))
+#               predicts the optimum moves < 1 octave between 1 and 5 people, so
+#               octave steps alone could miss it.
+#   density:    k = 1, 2 or 5 training people (nested subsets: the k=1 person is
+#               inside the k=2 pair, inside all 5; who is drawn changes with seed)
+#   fold:       leave-one-subject-out over all 6 Neuroprobe Lite people (n = 6)
+#   seed:       2 (also sets which people are drawn for k = 1, 2)
+# 6 folds x 3 densities x 9 encodings x 2 seeds = 324 runs, recipe r2_stft_car.
+#
+# Measured before running (MNI coords, all electrodes): electrodes per occupied
+# cube barely changes with k (20 mm: median 3.5 at k=1, 4.3 at k=5) because
+# electrodes cluster on shafts, but COVERAGE does (share of the held-out person's
+# electrodes in a cube some training person occupied, 20 mm: 0.34 / 0.58 / 0.83
+# for k = 1 / 2 / 5; 5 mm: 0.04 / 0.08 / 0.18). So density should act mainly
+# through coverage.
+#
+# Analysis, fixed before running (scripts/analyze_density.py; outcome = test AUC
+# of the held-out person at the last epoch):
+#   gain(h) = AUC(cube h) - AUC(none), same person, density and seed; mean over seeds.
+#   H1 (primary): per person and density, slope of gain on log2(80 / h) (how much
+#      each halving of cube size helps). Interaction = slope(k=5) - slope(k=1).
+#      Prediction: > 0 (finer resolution pays off more with more data).
+#      Primary test: permutation of density labels within each person x seed
+#      (statistic = mean slope difference; valid for these 6 people). Population-
+#      level secondary: exact sign-flip over the 6 people (smallest p = 0.031).
+#      Chosen before running from a power simulation at Phase 0's cross-subject
+#      noise: the sign-flip alone has < 0.2 power unless the effect is large.
+#   H2: how far the best cube size moves. Pooled fit over people x density x h:
+#      gain ~ 1 + x + x^2 + s + x*s + x^2*s, x = log2(80 / h), s = log2 k; optimum
+#      x*(s) = vertex; report dx*/ds (octaves finer per doubling of training people)
+#      with a bootstrap over people. Prediction: > 0; variance-only theory gives
+#      1/(d+2) = 0.2-0.33. Also per-density argmax and quadratic vertex, descriptive.
+#   H3 (mechanism): across all person x density x h cells, does gain depend on k
+#      once coverage is known? Fit gain ~ log2 h * coverage, then add k; report how
+#      much k adds (leave-one-person-out R^2). If little: density works through coverage.
+#
+# Seeds, staged (rule fixed before running). Power simulation at Phase 0's
+# cross-subject noise (run SD 0.059): with 2 seeds the primary test detects an
+# interaction only if the k=5 peak gain is >= ~0.06 AUC. Stage 1 runs seeds 0-1.
+# Then compute ONLY the per-run seed SD of gain (scripts/analyze_density.py
+# --noise-only; never look at the effect first) and add seeds (next ones: 2, 3)
+# until the simulated power at peak gain 0.03 is >= 0.5 or seeds = 4.
+#
+# Paths below are relative to spatialResolutionTesting/, where every job runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: density_resolution
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+axes:
+  fold:
+    ho01: {data.test_subjects: [1]}
+    ho02: {data.test_subjects: [2]}
+    ho03: {data.test_subjects: [3]}
+    ho04: {data.test_subjects: [4]}
+    ho07: {data.test_subjects: [7]}
+    ho10: {data.test_subjects: [10]}
+  density:
+    k1: {data.n_train_subjects: 1}
+    k2: {data.n_train_subjects: 2}
+    k5: {data.n_train_subjects: 5}
+  spatial:
+    none:   {spatial.type: none}
+    grid80: {spatial.type: region, spatial.atlas: grid80}
+    grid57: {spatial.type: region, spatial.atlas: grid57}
+    grid40: {spatial.type: region, spatial.atlas: grid40}
+    grid28: {spatial.type: region, spatial.atlas: grid28}
+    grid20: {spatial.type: region, spatial.atlas: grid20}
+    grid14: {spatial.type: region, spatial.atlas: grid14}
+    grid10: {spatial.type: region, spatial.atlas: grid10}
+    grid5:  {spatial.type: region, spatial.atlas: grid5}
+  seed:
+    "0": {seed: 0, data.train_subset_seed: 0}
+    "1": {seed: 1, data.train_subset_seed: 1}

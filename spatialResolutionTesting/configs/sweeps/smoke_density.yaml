@@ -1,0 +1,27 @@
+# Smoke test for density_resolution: real data, 2 epochs, 4 runs. Checks the
+# n_train_subjects knob, grid cubes and the analysis end to end. Not a result.
+config: configs/neuroprobe_v2.yaml
+exp_name: smoke_density
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 2
+  train.min_epochs: 2
+axes:
+  fold:
+    ho03: {data.test_subjects: [3]}
+  density:
+    k1: {data.n_train_subjects: 1}
+    k5: {data.n_train_subjects: 5}
+  spatial:
+    none:   {spatial.type: none}
+    grid20: {spatial.type: region, spatial.atlas: grid20}
+  seed:
+    "0": {seed: 0, data.train_subset_seed: 0}
