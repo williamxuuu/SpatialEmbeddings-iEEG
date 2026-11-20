@@ -15,9 +15,11 @@ and how big they are, not whether they are significant.
 from __future__ import annotations
 
 import argparse
+import itertools
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +54,26 @@ def _diff(runs: pd.DataFrame, a: str, b: str, by: list[str]) -> pd.DataFrame:
     g = d.groupby(level=by) if by else d.groupby(lambda _: "all")
     return pd.DataFrame({"mean": g.mean(), "sd": g.std(ddof=1), "n": g.size(),
                          "n_pos": g.apply(lambda x: int((x > 0).sum()))})
+
+
+def _pair_signflip(runs: pd.DataFrame, a: str, b: str, by: list[str], n_flip: int = 20000, seed: int = 0):
+    """Two-sided sign-flip p of mean(a - b) over paired (by + seed) units, and the
+    population-level exact sign-flip over the means of `by` groups (e.g. people)."""
+    pa = runs[runs["spatial"] == a].set_index(by + ["seed"])["val_last"]
+    pb = runs[runs["spatial"] == b].set_index(by + ["seed"])["val_last"]
+    d = (pa - pb).dropna()
+    if len(d) < 2:
+        return None, None
+    v = d.to_numpy()
+    rng = np.random.default_rng(seed)
+    null = (rng.choice([-1, 1], size=(n_flip, len(v))) * v).mean(1)
+    p_units = float((1 + np.sum(np.abs(null) >= abs(v.mean()) - 1e-12)) / (1 + n_flip))
+    g = d.groupby(level=by).mean().to_numpy()
+    signs = np.array(list(itertools.product([1, -1], repeat=len(g)))) if len(g) <= 16 else None
+    p_pop = None
+    if signs is not None and len(g) > 1:
+        p_pop = float(np.mean(np.abs(signs @ g / len(g)) >= abs(g.mean()) - 1e-12))
+    return p_units, p_pop
 
 
 def _fmt(x) -> str:
@@ -116,14 +138,15 @@ def score_xsubj(df: pd.DataFrame, out: Out):
         out("No runs yet.\n")
         return
     df = df.copy()
-    df["size"] = df["density"]
+    df["size"] = df["density"] if "density" in df.columns else "k5"   # k5 only since 2026-11-20
+    sizes = [x for x in ("k2", "k5") if x in set(df["size"])]
     r = _run_level(df, ["fold", "size"])
     out(f"{len(r)} runs. Validation AUC (last epoch), mean over folds and seeds:\n")
     out(r.pivot_table(index="spatial", columns="size", values="val_last", aggfunc="mean")
         .round(4).to_string(), fence=True)
     eff = {}
     for atlas in ATLASES:
-        for size in ("k2", "k5"):
+        for size in sizes:
             rr = r[r["size"] == size]
             sub = rr[rr["spatial"].str.startswith(atlas + "_")]
             ok = len(sub) > 0 and sub["esc_early"].mean() >= F0_XSUBJ
@@ -140,9 +163,12 @@ def score_xsubj(df: pd.DataFrame, out: Out):
                 if name.startswith("D1"):
                     eff[(atlas, size)] = pooled
                 per_fold = ", ".join(f"{f} {_fmt(m)}" for f, m in d["mean"].items())
+                p_u, p_pop = _pair_signflip(rr, a, b, ["fold"])
+                ptxt = "" if p_u is None else (f"; sign-flip p = {p_u:.4f} over person x seed pairs"
+                                               + ("" if p_pop is None else f", {p_pop:.3f} over people"))
                 out.rule(f"{name} {atlas}/{size}", pooled > 0,
-                         f"{_fmt(pooled)} (per fold: {per_fold}; {int(d['n_pos'].sum())}/{int(d['n'].sum())} runs > 0)")
-    for atlas in ATLASES:
+                         f"{_fmt(pooled)} (per fold: {per_fold}; {int(d['n_pos'].sum())}/{int(d['n'].sum())} runs > 0{ptxt})")
+    for atlas in ATLASES if len(sizes) > 1 else []:
         a, b = eff.get((atlas, "k2")), eff.get((atlas, "k5"))
         out.rule(f"D3 density {atlas}", None,
                  f"soft - hard with 2 training people {_fmt(a)} vs 5 {_fmt(b)} (reported; no fixed prediction)")
@@ -151,7 +177,7 @@ def score_xsubj(df: pd.DataFrame, out: Out):
         out(df.drop_duplicates("run").pivot_table(index="spatial", columns="size", values="frac_unknown_test",
                                                   aggfunc="mean").round(3).to_string(), fence=True)
     out("\n(For information only, after the rules) test AUC of the held-out person, mean over seeds:\n")
-    out(df.pivot_table(index=["density", "spatial"], columns="fold", values="auc", aggfunc="mean").round(3).to_string(), fence=True)
+    out(df.pivot_table(index=["size", "spatial"], columns="fold", values="auc", aggfunc="mean").round(3).to_string(), fence=True)
 
 
 def main(argv=None):

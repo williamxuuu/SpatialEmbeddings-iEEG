@@ -60,6 +60,21 @@ def test_rules(monkeypatch, tmp_path):
     assert "[PASS]" in line("D4 equal coverage schaefer1000/k2")
 
 
+def test_xsubj_k5_only(monkeypatch, tmp_path):
+    gs = {("schaefer400", "k5"): 0.02, ("schaefer1000", "k5"): -0.02,
+          ("schaefer400", "k2"): 0.0, ("schaefer1000", "k2"): 0.0}
+    xs = _xsubj(gs)
+    xs = xs[xs["density"] == "k5"].drop(columns="density")
+    data = {"x": pd.DataFrame(), "s": xs}
+    monkeypatch.setattr(rep, "load_runs", lambda d: data[d[0]].copy())
+    rep.main(["x", "s", "--out", str(tmp_path / "r.md")])
+    t = (tmp_path / "r.md").read_text()
+    d1 = next(l for l in t.splitlines() if "D1 soft - hard schaefer400/k5" in l)
+    assert "[PASS]" in d1 and "sign-flip p = " in d1 and ", 0.031 over people" in d1
+    assert "[FAIL]" in next(l for l in t.splitlines() if "D1 soft - hard schaefer1000/k5" in l)
+    assert "D3 density" not in t and "/k2" not in t
+
+
 def test_empty(monkeypatch, tmp_path):
     monkeypatch.setattr(rep, "load_runs", lambda d: pd.DataFrame())
     rep.main(["x", "s", "--out", str(tmp_path / "r.md")])

@@ -1,30 +1,31 @@
 # Experiment 2, Phase 0 (part 2, cross-subject): soft vs hard at HIGH resolution
-# (Schaefer 400 and 1000) on people the model never saw, at two training-data sizes.
-# 8 settings x 6 held-out people x 2 sizes x 3 seeds = 288 runs, recipe r2_stft_car.
+# (Schaefer 400 and 1000) on people the model never saw.
+# 8 settings x 6 held-out people x 12 seeds = 576 runs, recipe r2_stft_car.
 #
-# Held-out: every Neuroprobe Lite person (leave-one-subject-out), trained on
-#   k5: the other 5 people
-#   k2: 2 of them (nested draw, changes with seed; data.n_train_subjects, the same
-#       knob as configs/sweeps/density_resolution.yaml)
+# Held-out: every Neuroprobe Lite person (leave-one-subject-out), trained on the
+# other 5 people (the most representative setting; the 2-person arm was dropped
+# 2026-11-20 and its budget moved into seeds).
 # Coordinates only (reports/density_geometry.md): hard coverage of the held-out
-# person is 0.38 / 0.73 (Schaefer 400, k2 / k5) and 0.27 / 0.59 (Schaefer 1000);
-# soft gauss3 adds +0.12 / +0.16 and +0.16 / +0.21.
+# person is 0.73 (Schaefer 400) and 0.59 (Schaefer 1000); soft gauss3 adds +0.16 / +0.21.
 # The *_nearest rows map unseen regions to the nearest region training saw, so
 # soft and hard are also compared at equal coverage. Random-neighbour controls
-# are in phase0_soft_xsess only (cost).
+# are in phase0_soft_xsess only.
 #
-# Prediction if soft works by sharing data between neighbours / filling coverage:
-# soft - hard > 0, larger for Schaefer 1000 than 400, and (if mostly coverage)
-# shrinking in the equal-coverage (_nearest) comparison.
+# Seeds from a power analysis (Phase 0 cross-subject run SD 0.059, paired
+# difference SD 0.083, 6 people, sign-flip over person x seed pairs):
+#   seeds   power at soft - hard = 0.02 / 0.03 / 0.05
+#     3          0.15 / 0.29 / 0.68
+#     6          0.28 / 0.56 / 0.95
+#    12          0.51 / 0.85 / 1.00
+#    20          0.74 / 0.97 / 1.00
+# The population-level sign-flip over 6 people is capped (smallest p 0.031) and
+# stays ~0.4-0.5 at 0.03 if the effect varies between people; reported too.
 #
-# Feasibility and effect-size check. Rules, written before running, scored by
-# softRegionTesting/phase0_soft_report.py on validation AUC at the last epoch,
-# averaged over held-out people and seeds; per atlas x size:
+# Rules, written before running, scored by softRegionTesting/phase0_soft_report.py
+# on validation AUC at the last epoch (one held-out person per run), per atlas:
 #   F0 feasibility: >= 75% of runs leave the plateau (train loss < ln2 - 0.02 by epoch 10).
-#   D1 direction:   soft - hard > 0.
-#   D3 density:     (soft - hard) at k2 vs k5, reported (no fixed prediction: soft
-#                   fills more coverage at k5 but regions are sparser at k2).
-#   D4 coverage:    gauss3_nearest - hard_nearest > 0.
+#   D1 direction:   soft - hard > 0; sign-flip p over person x seed pairs reported.
+#   D4 coverage:    gauss3_nearest - hard_nearest > 0 (same test).
 #   Report effects and seed SD; they size Phase 1.
 #
 # Paths below are relative to spatialResolutionTesting/, where every job runs.
@@ -49,9 +50,6 @@ axes:
     ho04: {data.test_subjects: [4]}
     ho07: {data.test_subjects: [7]}
     ho10: {data.test_subjects: [10]}
-  density:
-    k2: {data.n_train_subjects: 2}
-    k5: {data.n_train_subjects: 5}
   spatial:
     schaefer400_hard:            {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
     schaefer400_gauss3:          {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
@@ -61,7 +59,4 @@ axes:
     schaefer1000_gauss3:         {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3}
     schaefer1000_hard_nearest:   {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: hard, spatial.unseen: nearest_seen}
     schaefer1000_gauss3_nearest: {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.unseen: nearest_seen}
-  seed:
-    "0": {seed: 0, data.train_subset_seed: 0}
-    "1": {seed: 1, data.train_subset_seed: 1}
-    "2": {seed: 2, data.train_subset_seed: 2}
+  seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
