@@ -11,7 +11,7 @@
 #   resolution: none + cubes of side 80, 40, 20, 10, 5 mm (pure resolution knob,
 #               no anatomy; atlases are the follow-up)
 #   fold:       leave-one-subject-out over all 6 Neuroprobe Lite people (n = 6)
-# 6 folds x 2 densities x 6 encodings x 24 seeds = 1728 runs, recipe r2_stft_car.
+# 6 folds x 2 densities x 6 encodings x 12 seeds = 864 runs, recipe r2_stft_car.
 #
 # Why thin electrodes instead of dropping people (the first design, 1/2/5 people,
 # cancelled 2026-11-20 before running): the user's axis is electrodes per region,
@@ -33,9 +33,9 @@
 # octave per doubling of electrodes; H1 / H2 power at peak gain 0.03 / 0.05 AUC):
 #   e25 vs e100, 12 seeds:  0.23/0.35  0.63/0.72
 #   e25 vs e100, 24 seeds:  0.38/0.65  0.85/0.93
-#   e10 vs e100, 12 seeds:  0.57/0.70  0.93/1.00
+#   e10 vs e100, 12 seeds:  0.57/0.70  0.93/1.00   <- chosen (cost; 24 was cut 2026-11-20)
 #   e10 vs e100, 16 seeds:  0.60/0.85  0.98/0.98
-#   e10 vs e100, 24 seeds:  0.80/0.95  1.00/1.00   <- chosen
+#   e10 vs e100, 24 seeds:  0.80/0.95  1.00/1.00
 # 9 half-octave cube sizes instead of 5 did not help at equal runs.
 #
 # Analysis, fixed before running (scripts/analyze_density.py; outcome = test AUC
@@ -97,15 +97,3 @@ axes:
     "9": {seed: 9, data.train_electrode_seed: 9}
     "10": {seed: 10, data.train_electrode_seed: 10}
     "11": {seed: 11, data.train_electrode_seed: 11}
-    "12": {seed: 12, data.train_electrode_seed: 12}
-    "13": {seed: 13, data.train_electrode_seed: 13}
-    "14": {seed: 14, data.train_electrode_seed: 14}
-    "15": {seed: 15, data.train_electrode_seed: 15}
-    "16": {seed: 16, data.train_electrode_seed: 16}
-    "17": {seed: 17, data.train_electrode_seed: 17}
-    "18": {seed: 18, data.train_electrode_seed: 18}
-    "19": {seed: 19, data.train_electrode_seed: 19}
-    "20": {seed: 20, data.train_electrode_seed: 20}
-    "21": {seed: 21, data.train_electrode_seed: 21}
-    "22": {seed: 22, data.train_electrode_seed: 22}
-    "23": {seed: 23, data.train_electrode_seed: 23}

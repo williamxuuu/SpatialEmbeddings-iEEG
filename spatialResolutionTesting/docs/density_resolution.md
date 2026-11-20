@@ -46,9 +46,9 @@ octaves (d = 3 to 1). Hence half-octave cube sizes.
 | held-out person | all 6 (leave-one-subject-out), trained on the other 5 |
 | density | e100 (all training electrodes), e10 (random 10%, redrawn per seed) |
 | encoding | none; cubes 80, 40, 20, 10, 5 mm |
-| seed | 0-23 |
+| seed | 0-11 |
 
-1728 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs, last epoch.
+864 runs, recipe r2_stft_car (Phase 0 pick), 40 epochs, last epoch.
 
 ## Analysis (`scripts/analyze_density.py`, fixed before running)
 
@@ -66,8 +66,9 @@ gain(h) = AUC(cube h) - AUC(none), paired on person, density and seed.
 Figure: gain vs cube size per k, and gain vs coverage.
 
 **Power** (simulated at Phase 0's cross-subject run SD 0.059, best size moving
-0.25 octave per doubling of electrodes): e10 vs e100 with 24 seeds detects a 0.03 AUC
-peak gain with power 0.80 (H1) / 0.95 (H2); e25 would give 0.38 / 0.65. Table in the
+0.25 octave per doubling of electrodes): e10 vs e100 with 12 seeds detects a 0.05 AUC
+peak gain with power 0.93 (H1) / 1.00 (H2), a 0.03 gain with 0.57 / 0.70 (24 seeds: 0.80 / 0.95,
+cut for cost). Table in the
 sweep header.
 
 ## Run
