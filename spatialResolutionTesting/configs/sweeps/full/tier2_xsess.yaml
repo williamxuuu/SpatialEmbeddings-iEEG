@@ -2,7 +2,8 @@
 # cubes) and a 3-point soft-width curve: Destrieux Gaussian sigma 1.5 and 6 mm,
 # with sigma 3 mm from Tier 1. Run the width rows ONLY if Tier 1 shows
 # destrieux_gauss3 beats hard destrieux; after a null result at 3 mm, searching
-# other widths would be fishing. Speech + onset, 3 seeds. 84 runs.
+# other widths would be fishing. Speech + onset, 3 seeds. 120 runs.
+# Also holds lobes and the ho_prob pair, moved from Tier 1 to cut cost.
 config: configs/neuroprobe_v2.yaml
 exp_name: tier2_xsess
 overrides:
@@ -69,6 +70,21 @@ axes:
       spatial.atlas: destrieux
       spatial.mode: gaussian
       spatial.sigma_mm: 6
+    lobes:
+      spatial.type: region
+      spatial.atlas: lobes
+    ho_prob_soft:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: prob
+      spatial.sigma_mm: 0
+    ho_prob_argmax:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: hard
+      spatial.sigma_mm: 0
   seed:
   - 0
   - 1

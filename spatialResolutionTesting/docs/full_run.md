@@ -60,10 +60,16 @@ exists. Change them only with a dated note saying why.
 | Phase | Sweep(s) | Runs | Purpose | Gate to continue |
 |---|---|---|---|---|
 | 0 | `phase0_recipe.yaml` + `phase0_xsubj.yaml` | 45 + 24 | Pick the recipe (front end, reference, readout) on validation data; check it also learns on new people | `phase0_report.py`: leaves the plateau in ≥8/9 cross-session and ≥6/8 cross-subject runs; copy it into `neuroprobe_v2.yaml` |
-| 1 | `full/full_xsess.yaml`, `full/full_xsubj.yaml` | 260 + 540 | The paper: 13-15 encodings, speech + onset, both cross-session directions, LOSO | none (analyse) |
-| 2 | `full/tier2_*.yaml` | 84 + 252 | Finer resolution curve; soft width σ = 1.5 / 6 mm (with Tier 1's 3 mm) | after Phase 1; width rows only if Tier 1's gauss3 beats hard |
+| 1 | `full/full_xsess.yaml`, `full/full_xsubj.yaml` | 120 + 432 | The paper: 10-12 encodings, speech + onset, both cross-session directions, LOSO, 3 seeds | none (analyse) |
+| 2 | `full/tier2_*.yaml` | 120 + 360 | Finer resolution curve (+ `lobes`); soft width σ = 1.5 / 6 mm (with Tier 1's 3 mm); `ho_prob` soft vs argmax | after Phase 1; width rows only if Tier 1's gauss3 beats hard |
 | 3 | `full/tier3_*.yaml` | 216 + 648 | Task dependence (delta_volume, volume, word_index, global_flow) | optional |
 | 4 | `full/tier4_*.yaml` | 216 + 90 + 90 + 216 | Robustness: localization jitter, Lite electrodes, CNN front end, linear model | after Phase 1 |
+
+**Cost cut (2026-11-20, before any Phase 0 result):** cross-session seeds 5 → 3 (n is still 6
+people; seeds only make each person's mean less noisy), and `lobes` + the `ho_prob_soft` /
+`ho_prob_argmax` pair moved from Tier 1 to Tier 2. Chosen by scientific priority, not by any
+result. Phase 1 went from 800 to 552 runs. Leave-one-subject-out is kept (pairs would train on 4
+people and inflate unseen regions for fine atlases, confounding the resolution question).
 
 ## 5. Statistics (pre-registered; `scripts/analyze_full.py`)
 
@@ -78,6 +84,13 @@ exists. Change them only with a dated note saying why.
 - **Also reported:** bootstrap 95% CIs (subjects, then seeds); share of runs that leave the plateau
   and the epoch they do; location-probe drop; fraction of held-out weight on `<unknown>`;
   Spearman ρ of AUC vs log(#regions) (descriptive).
+- **Leaderboard format** (`leaderboard_format.csv`): mean test AUROC over test sessions per
+  (task, encoding), as Neuroprobe reports it, for seed 0 alone (one run, like a leaderboard entry)
+  and mean / range over seeds. Neuroprobe's own protocol is the floor we hold ourselves to (fixed
+  benchmark splits and windows, no test data in model selection); ours adds seeds, a fixed
+  last-epoch rule, and subject-level tests. Comparable to neuroprobe.dev: cross-session only, and
+  even there our model is one model for all 6 people, not one per subject. Our LOSO cross-subject
+  is not the official split (train on subject 2 trial 4 only).
 - A "no difference" claim needs an equivalence argument (e.g. 95% CI inside ±0.01 AUC), not p > 0.05.
 - Analyse Tier 1 + Tier 2 + Tier 4a together; Tier 3, 4b, 4c, 4d each separately (the script
   refuses to average the same encoding name across different protocols).

@@ -1,10 +1,12 @@
 # Full run, Tier 1, cross-session (new movie, same people).
 # 2 tasks x 2 directions (test on each person's 2nd Lite movie, then on the 1st)
-# x 13 encodings x 5 seeds = 260 runs. All 6 people in one model per run.
+# x 10 encodings x 3 seeds = 120 runs. All 6 people in one model per run.
 # Base protocol: configs/neuroprobe_v2.yaml (set its recipe from Phase 0 FIRST).
 # Encoding names: configs/sweeps/full/_encodings.md. Analysis: scripts/analyze_full.py.
 # Caveat built into the design: in cross-session a fine code can act as an
 # electrode name tag (electrode_id is the control for exactly that).
+# Cost cut 2026-11-20 (decided before any Phase 0 result): lobes and the
+# ho_prob_soft/ho_prob_argmax pair moved to Tier 2; seeds 5 -> 3 (n is still 6 people). 120 runs.
 config: configs/neuroprobe_v2.yaml
 exp_name: full_xsess
 overrides:
@@ -52,9 +54,6 @@ axes:
       spatial.type: electrode_id
     coords:
       spatial.type: coords
-    lobes:
-      spatial.type: region
-      spatial.atlas: lobes
     ho:
       spatial.type: region
       spatial.atlas: ho
@@ -82,21 +81,7 @@ axes:
       spatial.mode: gaussian
       spatial.sigma_mm: 3
       spatial.control: random_neighbors
-    ho_prob_soft:
-      spatial.type: region
-      spatial.source: prob_atlas
-      spatial.atlas: ho_prob
-      spatial.mode: prob
-      spatial.sigma_mm: 0
-    ho_prob_argmax:
-      spatial.type: region
-      spatial.source: prob_atlas
-      spatial.atlas: ho_prob
-      spatial.mode: hard
-      spatial.sigma_mm: 0
   seed:
   - 0
   - 1
   - 2
-  - 3
-  - 4

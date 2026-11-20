@@ -196,6 +196,32 @@ def main(argv=None):
             rho, _ = spearmanr(np.log(g["n_regions"]), g["auc"])
             lines.append(f"- {sp} / {tk}: rho = {rho:.2f} over {len(g)} encodings")
     res_tab.to_csv(os.path.join(a.out, "resolution.csv"), index=False)
+
+    # 4. Leaderboard format (Neuroprobe): one number per (task, encoding) = mean test
+    # AUROC over test sessions (subject x test movie), from a single run. We show
+    # seed 0 alone (one run, as on the leaderboard) and the mean / range over seeds.
+    # Differences from the leaderboard to state when comparing: our cross-session
+    # model is one model for all 6 people (the leaderboard trains per subject), and
+    # our cross-subject split is leave-one-subject-out (the official one trains on
+    # subject 2 trial 4 only), so cross-subject numbers are NOT leaderboard-comparable.
+    sess = ["subject"] + [c for c in ("direction",) if c in df]
+    per_sess = df.groupby(["split", "task", "spatial", "seed"] + sess, as_index=False)["y"].mean()
+    per_run = per_sess.groupby(["split", "task", "spatial", "seed"], as_index=False)["y"].mean()
+    lb = per_run.groupby(["split", "task", "spatial"]).agg(
+        seed0=("y", lambda s: s[per_run.loc[s.index, "seed"] == 0].mean()),
+        seed_mean=("y", "mean"), seed_min=("y", "min"), seed_max=("y", "max"),
+        n_seeds=("y", "size")).reset_index()
+    nsess = per_sess.groupby(["split", "task", "spatial", "seed"]).size().groupby(
+        ["split", "task", "spatial"]).max().rename("n_sessions")
+    lb = lb.set_index(["split", "task", "spatial"]).join(nsess).reset_index()
+    lb.to_csv(os.path.join(a.out, "leaderboard_format.csv"), index=False)
+    lines.append("\n# Leaderboard format\n\nMean test AUROC over test sessions, as Neuroprobe reports "
+                 "it. `seed0` = one run, like a leaderboard entry. Cross-subject here is LOSO, not the "
+                 "official split; compare only cross-session with neuroprobe.dev.\n")
+    for (sp, tk), g in lb.groupby(["split", "task"]):
+        lines.append(f"\n## {sp} / {tk}\n")
+        lines.append(g.drop(columns=["split", "task"]).sort_values("seed_mean", ascending=False).pipe(md))
+
     with open(os.path.join(a.out, "summary.md"), "w") as f:
         f.write("\n".join(lines) + "\n")
     print("\n".join(lines))
