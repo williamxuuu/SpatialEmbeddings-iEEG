@@ -1,0 +1,62 @@
+# Tier 4b: Neuroprobe Lite's 120 electrodes (picked by linear decodability)
+# instead of all usable electrodes. Does the electrode subset change the answer?
+# Speech, LOSO, 5 encodings, 3 seeds: 90 runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: tier4_lite
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.subject_trials:
+  - - 1
+    - 2
+  - - 2
+    - 4
+  - - 3
+    - 1
+  - - 4
+    - 1
+  - - 7
+    - 1
+  - - 10
+    - 1
+  data.eval_name: speech
+  data.electrodes: lite
+axes:
+  fold:
+    heldout1:
+      data.test_subjects:
+      - 1
+    heldout2:
+      data.test_subjects:
+      - 2
+    heldout3:
+      data.test_subjects:
+      - 3
+    heldout4:
+      data.test_subjects:
+      - 4
+    heldout7:
+      data.test_subjects:
+      - 7
+    heldout10:
+      data.test_subjects:
+      - 10
+  spatial:
+    none:
+      spatial.type: none
+    electrode_id:
+      spatial.type: electrode_id
+    coords:
+      spatial.type: coords
+    destrieux:
+      spatial.type: region
+      spatial.atlas: destrieux
+    destrieux_gauss3:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+  seed:
+  - 0
+  - 1
+  - 2

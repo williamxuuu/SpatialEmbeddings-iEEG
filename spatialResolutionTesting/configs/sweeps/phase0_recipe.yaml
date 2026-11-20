@@ -1,0 +1,28 @@
+# Phase 0: fix the training recipe BEFORE comparing spatial encodings.
+# 5 recipes x 3 spatial settings x 3 seeds = 45 runs, speech, cross_session,
+# all electrodes, 40 epochs each, no early stopping.
+#
+# Rule, written before running (scripts/phase0_report.py applies it):
+#   score = validation mean-subject AUC at the LAST epoch (never test data),
+#   averaged over the 9 runs of a recipe. Pick the highest-scoring recipe that
+#   also leaves the loss plateau in >= 8/9 runs (train loss < ln2 - 0.02 by
+#   epoch 10). Ties within 0.005: the simpler recipe (earlier in this list).
+#   Then copy its frontend / reref / readout into configs/neuroprobe_v2.yaml.
+config: configs/neuroprobe_v2.yaml
+exp_name: phase0_recipe
+overrides:
+  model.name: transformer
+  data.split: cross_session
+  data.eval_name: speech
+axes:
+  recipe:
+    r0_pilot_input:  {model.frontend: cnn,  preprocess.zscore: window,  preprocess.reref: car,       model.readout: cls}
+    r1_cnn_session:  {model.frontend: cnn,  preprocess.zscore: session, preprocess.reref: car,       model.readout: cls}
+    r2_stft_car:     {model.frontend: stft, preprocess.zscore: session, preprocess.reref: car,       model.readout: cls}
+    r3_stft_lap:     {model.frontend: stft, preprocess.zscore: session, preprocess.reref: laplacian, model.readout: cls}
+    r4_stft_lap_mean: {model.frontend: stft, preprocess.zscore: session, preprocess.reref: laplacian, model.readout: mean}
+  spatial:
+    none:      {spatial.type: none}
+    destrieux: {spatial.type: region, spatial.atlas: destrieux}
+    coords:    {spatial.type: coords}
+  seed: [0, 1, 2]

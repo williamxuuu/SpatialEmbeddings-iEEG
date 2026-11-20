@@ -1,0 +1,102 @@
+# Full run, Tier 1, cross-session (new movie, same people).
+# 2 tasks x 2 directions (test on each person's 2nd Lite movie, then on the 1st)
+# x 13 encodings x 5 seeds = 260 runs. All 6 people in one model per run.
+# Base protocol: configs/neuroprobe_v2.yaml (set its recipe from Phase 0 FIRST).
+# Encoding names: configs/sweeps/full/_encodings.md. Analysis: scripts/analyze_full.py.
+# Caveat built into the design: in cross-session a fine code can act as an
+# electrode name tag (electrode_id is the control for exactly that).
+config: configs/neuroprobe_v2.yaml
+exp_name: full_xsess
+overrides:
+  model.name: transformer
+  data.split: cross_session
+axes:
+  task:
+    speech:
+      data.eval_name: speech
+    onset:
+      data.eval_name: onset
+  direction:
+    testB:
+      data.subject_trials:
+      - - 1
+        - 2
+      - - 2
+        - 4
+      - - 3
+        - 1
+      - - 4
+        - 1
+      - - 7
+        - 1
+      - - 10
+        - 1
+    testA:
+      data.subject_trials:
+      - - 1
+        - 1
+      - - 2
+        - 0
+      - - 3
+        - 0
+      - - 4
+        - 0
+      - - 7
+        - 0
+      - - 10
+        - 0
+  spatial:
+    none:
+      spatial.type: none
+    electrode_id:
+      spatial.type: electrode_id
+    coords:
+      spatial.type: coords
+    lobes:
+      spatial.type: region
+      spatial.atlas: lobes
+    ho:
+      spatial.type: region
+      spatial.atlas: ho
+    destrieux:
+      spatial.type: region
+      spatial.atlas: destrieux
+    schaefer400:
+      spatial.type: region
+      spatial.atlas: schaefer400
+    grid20:
+      spatial.type: region
+      spatial.atlas: grid20
+    destrieux_shuffled:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.control: shuffle_electrodes
+    destrieux_gauss3:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+    destrieux_gauss3_randnbr:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+      spatial.control: random_neighbors
+    ho_prob_soft:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: prob
+      spatial.sigma_mm: 0
+    ho_prob_argmax:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: hard
+      spatial.sigma_mm: 0
+  seed:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4

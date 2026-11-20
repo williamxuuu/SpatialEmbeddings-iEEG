@@ -1,0 +1,84 @@
+# Tier 3 (xsess): does the answer depend on the task? Four more Neuroprobe tasks
+# that strong models decode above chance (delta_volume, volume, word_index:
+# auditory/language; global_flow: visual motion), 9 encodings, 3 seeds.
+# Optional; 216 runs. Location effects may be task-specific (which
+# regions carry the signal), so per-task results matter more than the pooled one.
+config: configs/neuroprobe_v2.yaml
+exp_name: tier3_xsess
+overrides:
+  model.name: transformer
+  data.split: cross_session
+axes:
+  task:
+    delta_volume:
+      data.eval_name: delta_volume
+    volume:
+      data.eval_name: volume
+    word_index:
+      data.eval_name: word_index
+    global_flow:
+      data.eval_name: global_flow
+  direction:
+    testB:
+      data.subject_trials:
+      - - 1
+        - 2
+      - - 2
+        - 4
+      - - 3
+        - 1
+      - - 4
+        - 1
+      - - 7
+        - 1
+      - - 10
+        - 1
+    testA:
+      data.subject_trials:
+      - - 1
+        - 1
+      - - 2
+        - 0
+      - - 3
+        - 0
+      - - 4
+        - 0
+      - - 7
+        - 0
+      - - 10
+        - 0
+  spatial:
+    none:
+      spatial.type: none
+    electrode_id:
+      spatial.type: electrode_id
+    coords:
+      spatial.type: coords
+    lobes:
+      spatial.type: region
+      spatial.atlas: lobes
+    destrieux:
+      spatial.type: region
+      spatial.atlas: destrieux
+    schaefer400:
+      spatial.type: region
+      spatial.atlas: schaefer400
+    destrieux_shuffled:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.control: shuffle_electrodes
+    destrieux_gauss3:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+    ho_prob_soft:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: prob
+      spatial.sigma_mm: 0
+  seed:
+  - 0
+  - 1
+  - 2

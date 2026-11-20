@@ -1,0 +1,32 @@
+# Real data, post-pilot training protocol (see docs/full_run.md).
+# Changes from neuroprobe.yaml, each answering something the pilot showed:
+#  - No early stopping inside the loss plateau: train the full 40 epochs
+#    (min_epochs = epochs). The pilot stopped 107/174 runs by epoch 14, while
+#    runs that learned only left the plateau at epochs 17-18.
+#  - select: last. The reported model is the final epoch, so no test-person
+#    labels (validation = first half of the test recording) pick the model.
+#    The best-validation epoch is still evaluated and saved for comparison.
+#  - Recording-level z-scoring (zscore: session) keeps power changes between
+#    windows. A linear band-power model decodes speech about equally well either
+#    way (subject 3: 0.929 per-window vs 0.935 session), so this is a safe
+#    default, not the fix; Phase 0 (r0 vs r1) measures it for the transformer.
+#  - Spectral front end (frontend: stft): the raw-voltage CNN must learn
+#    spectral features from scratch, which is the likely cause of the plateau.
+#  - Input recipe (frontend / reref / readout) is chosen by Phase 0
+#    (configs/sweeps/phase0_recipe.yaml) on validation data, then fixed here.
+_base: neuroprobe.yaml
+data:
+  electrodes: all          # every usable contact; Lite's 120 were picked by linear decodability
+preprocess:
+  reref: laplacian         # Phase 0 candidate; car | laplacian
+  zscore: session
+  clip: 10
+model:
+  frontend: stft           # Phase 0 candidate; cnn | stft
+  readout: cls             # Phase 0 candidate; cls | mean
+train:
+  epochs: 40
+  min_epochs: 40           # = no early stopping
+  patience: 8
+  select: last
+  location_probe: true

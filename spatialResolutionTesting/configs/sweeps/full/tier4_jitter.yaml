@@ -1,0 +1,79 @@
+# Tier 4a: localization error. Every electrode moved by N(0, 2 or 4 mm) per axis
+# (fixed per seed) before encoding. If soft beats hard because it absorbs
+# localization error, hard should lose more under jitter than soft does.
+# Compare against the jitter-0 rows of full_xsubj (destrieux, destrieux_gauss3,
+# coords). Speech + onset, LOSO, 3 seeds: 216 runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: tier4_jitter
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.subject_trials:
+  - - 1
+    - 2
+  - - 2
+    - 4
+  - - 3
+    - 1
+  - - 4
+    - 1
+  - - 7
+    - 1
+  - - 10
+    - 1
+axes:
+  task:
+    speech:
+      data.eval_name: speech
+    onset:
+      data.eval_name: onset
+  fold:
+    heldout1:
+      data.test_subjects:
+      - 1
+    heldout2:
+      data.test_subjects:
+      - 2
+    heldout3:
+      data.test_subjects:
+      - 3
+    heldout4:
+      data.test_subjects:
+      - 4
+    heldout7:
+      data.test_subjects:
+      - 7
+    heldout10:
+      data.test_subjects:
+      - 10
+  spatial:
+    destrieux_jit2:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.jitter_mm: 2
+    destrieux_gauss3_jit2:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+      spatial.jitter_mm: 2
+    coords_jit2:
+      spatial.type: coords
+      spatial.jitter_mm: 2
+    destrieux_jit4:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.jitter_mm: 4
+    destrieux_gauss3_jit4:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+      spatial.jitter_mm: 4
+    coords_jit4:
+      spatial.type: coords
+      spatial.jitter_mm: 4
+  seed:
+  - 0
+  - 1
+  - 2

@@ -1,0 +1,84 @@
+# Tier 2 (xsess): fills in the resolution curve (Schaefer 100/1000, 40/10/5 mm
+# cubes) and the soft-width curve (Destrieux Gaussian sigma 1.5/2/5 mm, 10 mm ball),
+# speech + onset, 3 seeds. Run after Tier 1; analyse together with it
+# (same encodings names space, same protocol). 108 runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: tier2_xsess
+overrides:
+  model.name: transformer
+  data.split: cross_session
+axes:
+  task:
+    speech:
+      data.eval_name: speech
+    onset:
+      data.eval_name: onset
+  direction:
+    testB:
+      data.subject_trials:
+      - - 1
+        - 2
+      - - 2
+        - 4
+      - - 3
+        - 1
+      - - 4
+        - 1
+      - - 7
+        - 1
+      - - 10
+        - 1
+    testA:
+      data.subject_trials:
+      - - 1
+        - 1
+      - - 2
+        - 0
+      - - 3
+        - 0
+      - - 4
+        - 0
+      - - 7
+        - 0
+      - - 10
+        - 0
+  spatial:
+    schaefer100:
+      spatial.type: region
+      spatial.atlas: schaefer100
+    schaefer1000:
+      spatial.type: region
+      spatial.atlas: schaefer1000
+    grid40:
+      spatial.type: region
+      spatial.atlas: grid40
+    grid10:
+      spatial.type: region
+      spatial.atlas: grid10
+    grid5:
+      spatial.type: region
+      spatial.atlas: grid5
+    destrieux_gauss1p5:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 1.5
+    destrieux_gauss2:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 2
+    destrieux_gauss5:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 5
+    destrieux_sphere10:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: sphere
+      spatial.radius_mm: 10
+  seed:
+  - 0
+  - 1
+  - 2

@@ -1,0 +1,112 @@
+# Full run, Tier 1, cross-subject (people the model never saw): the main test
+# for location codes. Leave-one-subject-out: 6 folds, train on the other 5
+# people's Lite movies (minus the test movie), test on the held-out person.
+# 2 tasks x 6 folds x 15 encodings x 3 seeds = 540 runs.
+# Every person is a test subject once, so contrasts get n=6 subjects (exact
+# sign-flip p >= 0.031); the pilot's fixed pair (2, 7) capped n at 2 (p >= 0.5).
+config: configs/neuroprobe_v2.yaml
+exp_name: full_xsubj
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.subject_trials:
+  - - 1
+    - 2
+  - - 2
+    - 4
+  - - 3
+    - 1
+  - - 4
+    - 1
+  - - 7
+    - 1
+  - - 10
+    - 1
+axes:
+  task:
+    speech:
+      data.eval_name: speech
+    onset:
+      data.eval_name: onset
+  fold:
+    heldout1:
+      data.test_subjects:
+      - 1
+    heldout2:
+      data.test_subjects:
+      - 2
+    heldout3:
+      data.test_subjects:
+      - 3
+    heldout4:
+      data.test_subjects:
+      - 4
+    heldout7:
+      data.test_subjects:
+      - 7
+    heldout10:
+      data.test_subjects:
+      - 10
+  spatial:
+    none:
+      spatial.type: none
+    electrode_id:
+      spatial.type: electrode_id
+    coords:
+      spatial.type: coords
+    lobes:
+      spatial.type: region
+      spatial.atlas: lobes
+    ho:
+      spatial.type: region
+      spatial.atlas: ho
+    destrieux:
+      spatial.type: region
+      spatial.atlas: destrieux
+    schaefer400:
+      spatial.type: region
+      spatial.atlas: schaefer400
+    grid20:
+      spatial.type: region
+      spatial.atlas: grid20
+    destrieux_shuffled:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.control: shuffle_electrodes
+    destrieux_gauss3:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+    destrieux_gauss3_randnbr:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+      spatial.control: random_neighbors
+    ho_prob_soft:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: prob
+      spatial.sigma_mm: 0
+    ho_prob_argmax:
+      spatial.type: region
+      spatial.source: prob_atlas
+      spatial.atlas: ho_prob
+      spatial.mode: hard
+      spatial.sigma_mm: 0
+    destrieux_nearest:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.unseen: nearest_seen
+    destrieux_gauss3_nearest:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+      spatial.unseen: nearest_seen
+  seed:
+  - 0
+  - 1
+  - 2

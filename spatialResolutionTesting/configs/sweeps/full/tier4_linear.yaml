@@ -1,0 +1,71 @@
+# Tier 4d: the region-pooled linear model (log band power averaged within each
+# region, then logistic regression). Location enters a linear model only
+# through pooling, so this is the simplest test of "do regions help". Speech +
+# onset, LOSO, 6 encodings, 3 seeds: 216 runs (CPU-friendly; small).
+config: configs/neuroprobe_v2.yaml
+exp_name: tier4_linear
+overrides:
+  model.name: linear
+  data.split: cross_subject
+  data.subject_trials:
+  - - 1
+    - 2
+  - - 2
+    - 4
+  - - 3
+    - 1
+  - - 4
+    - 1
+  - - 7
+    - 1
+  - - 10
+    - 1
+  train.location_probe: false
+axes:
+  task:
+    speech:
+      data.eval_name: speech
+    onset:
+      data.eval_name: onset
+  fold:
+    heldout1:
+      data.test_subjects:
+      - 1
+    heldout2:
+      data.test_subjects:
+      - 2
+    heldout3:
+      data.test_subjects:
+      - 3
+    heldout4:
+      data.test_subjects:
+      - 4
+    heldout7:
+      data.test_subjects:
+      - 7
+    heldout10:
+      data.test_subjects:
+      - 10
+  spatial:
+    none:
+      spatial.type: none
+    electrode_id:
+      spatial.type: electrode_id
+    destrieux:
+      spatial.type: region
+      spatial.atlas: destrieux
+    destrieux_gauss3:
+      spatial.type: region
+      spatial.atlas: destrieux
+      spatial.mode: gaussian
+      spatial.sigma_mm: 3
+    ho:
+      spatial.type: region
+      spatial.atlas: ho
+    lobes:
+      spatial.type: region
+      spatial.atlas: lobes
+  seed:
+  - 0
+  - 1
+  - 2
