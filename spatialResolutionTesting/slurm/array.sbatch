@@ -23,6 +23,31 @@ source slurm/activate_env.sh
 [ -z "$N_RUNS" ] && N_RUNS=$(grep -c . "$SWEEP_FILE")
 echo "[job] array=${SLURM_ARRAY_JOB_ID:-?} task=${SLURM_ARRAY_TASK_ID:-?} runs/task=$PER_TASK host=$(hostname) start=$(date)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || echo "[job] no GPU visible"
+# Stage the session cache onto node-local disk. Runs memory-map data.npy, and
+# when it lives on scratch (Lustre) the DataLoader workers intermittently hang
+# in cl_sync_io_wait once the page cache drops pages: on 2026-11-22 single
+# epochs took 20 min to 3.3 h (normally ~16 s) with the GPU at 0%, and one task
+# timed out. The cache is ~15 GB; one sequential copy takes ~1 min. Set
+# LOCEMB_LOCAL_CACHE=0 to read from scratch directly.
+if [ "${LOCEMB_LOCAL_CACHE:-1}" = 1 ] && [ -n "${LOCEMB_CACHE_DIR:-}" ] && [ -d "$LOCEMB_CACHE_DIR" ]; then
+  _local="${TMPDIR:-/tmp}/locemb_cache_${SLURM_JOB_ID:-$$}"
+  _need_kb=$(du -sk "$LOCEMB_CACHE_DIR" | cut -f1)
+  _free_kb=$(df -Pk "${TMPDIR:-/tmp}" | awk 'NR==2{print $4}')
+  if (( _free_kb > _need_kb * 12 / 10 )); then
+    _t0=$(date +%s)
+    mkdir -p "$_local"
+    trap 'rm -rf "$_local"' EXIT
+    if timeout 1800 rsync -a "$LOCEMB_CACHE_DIR/" "$_local/"; then
+      echo "[job] staged cache ($(( _need_kb / 1048576 )) GB) to $_local in $(( $(date +%s) - _t0 ))s"
+      export LOCEMB_CACHE_DIR="$_local"
+    else
+      echo "[job] WARN: staging cache failed; reading from $LOCEMB_CACHE_DIR"
+      rm -rf "$_local"
+    fi
+  else
+    echo "[job] WARN: not enough local disk for the cache; reading from $LOCEMB_CACHE_DIR"
+  fi
+fi
 rc=0
 first=$(( SLURM_ARRAY_TASK_ID * PER_TASK ))
 for (( i = first; i < first + PER_TASK && i < N_RUNS; i++ )); do

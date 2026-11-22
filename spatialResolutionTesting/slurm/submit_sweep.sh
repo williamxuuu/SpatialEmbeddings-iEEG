@@ -15,6 +15,12 @@ MAXPAR=16
 if [ $# -gt 0 ] && [[ "$1" =~ ^[0-9]+$ ]]; then MAXPAR="$1"; shift; fi
 source slurm/activate_env.sh
 read -r N FILE < <(python -m locemb.sweep "$SWEEP")
+# Queue only runs without metrics.json (LOCEMB_ONLY_PENDING=0 queues all; finished
+# ones are still skipped at run time, but each would hold a GPU slot briefly).
+if [ "${LOCEMB_ONLY_PENDING:-1}" = 1 ]; then
+  read -r N FILE < <(python scripts/pending_runs.py "$FILE")
+  if [ "$N" -eq 0 ]; then echo ">> nothing to do: every run has metrics.json"; exit 0; fi
+fi
 mkdir -p logs
 PER_TASK="${LOCEMB_PER_TASK:-1}"
 NTASK=$(( (N + PER_TASK - 1) / PER_TASK ))
