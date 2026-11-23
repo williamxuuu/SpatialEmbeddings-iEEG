@@ -1,0 +1,51 @@
+# Fix pilot (2026-11-23): does person-level validation + region-code dropout stop the
+# cross-subject collapse and bring seed SD down? See reports/diag/collapse_diagnosis.md.
+# 6 held-out people x (none + 3 encodings x code dropout {0, 0.5}) x 3 seeds = 126 runs.
+#
+# Every run: train on 4 people, pick the epoch on a 5th (validation) person
+# (data.val_subjects=auto: 1->2, 2->3, 3->4, 4->10, 7->10, 10->1), test on the held-out
+# person's second half. The held-out first half is evaluated every epoch as a monitor
+# only (history[].monitor_auc), so each run also gives the old "last epoch" number
+# (test_last) and an oracle curve, at no extra cost.
+#
+# Questions, scored by scripts/fix_pilot_report.py:
+#   Q1 selection: test AUC at the validation-person epoch vs at the last epoch.
+#   Q2 code dropout: does p=0.5 remove the decline / below-chance runs at the last epoch?
+#   Q3 noise: seed SD per (person, encoding) with the fix, vs 0.07-0.13 before.
+#   Q4 below chance: share of runs with test AUC < 0.5, before vs after.
+# Paths are relative to spatialResolutionTesting/, where every job runs.
+config: configs/neuroprobe_v2.yaml
+exp_name: fix_pilot
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  data.val_subjects: auto
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 20
+  train.min_epochs: 20
+  train.select: best        # best on the VALIDATION PERSON (no test labels)
+axes:
+  fold:
+    ho01: {data.test_subjects: [1]}
+    ho02: {data.test_subjects: [2]}
+    ho03: {data.test_subjects: [3]}
+    ho04: {data.test_subjects: [4]}
+    ho07: {data.test_subjects: [7]}
+    ho10: {data.test_subjects: [10]}
+  spatial:
+    none:              {spatial.type: none}
+    schaefer400_hard:  {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    schaefer1000_hard: {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: hard}
+    grid20:            {spatial.type: region, spatial.atlas: grid20}
+  drop:
+    d0:  {spatial.code_dropout: 0.0}
+    d50: {spatial.code_dropout: 0.5}
+  seed: [0, 1, 2]
+exclude:
+  - {spatial: none, drop: d50}

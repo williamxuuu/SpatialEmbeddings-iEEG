@@ -126,13 +126,21 @@ def run(cfg: dict) -> dict:
           f"test={len(bundle.test)}  [spatial] {json.dumps(assign.stats)}", flush=True)
 
     collate = Collator(assign.table)
+    p_drop = float(cfg["spatial"].get("code_dropout", 0.0) or 0.0)
+    if p_drop and cfg["spatial"].get("type", "none") not in ("region", "electrode_id"):
+        raise ValueError("spatial.code_dropout only applies to spatial.type region / electrode_id")
+    train_collate = Collator(assign.table, code_dropout=p_drop)
     nw = int(tr.get("num_workers", 4))
     mk = lambda ds, shuffle: DataLoader(ds, batch_size=tr.get("batch_size", 32), shuffle=shuffle,
-                                        num_workers=nw, collate_fn=collate,
+                                        num_workers=nw, collate_fn=train_collate if shuffle else collate,
                                         pin_memory=device.type == "cuda",
                                         persistent_workers=nw > 0, drop_last=False,
                                         worker_init_fn=_one_thread_worker if nw > 0 else None)
     train_dl, val_dl, test_dl = mk(bundle.train, True), mk(bundle.val, False), mk(bundle.test, False)
+    mon_dl = mk(bundle.monitor, False) if bundle.monitor is not None else None
+    if bundle.val_subjects:
+        print(f"[data] model selection on validation people {bundle.val_subjects}; "
+              f"test-recording first half = monitor only", flush=True)
 
     n_samples = int(bundle.train[0]["x"].shape[-1])
     model = build_model(cfg, assign.n_regions, bundle.sfreq, bundle.n_classes, n_samples).to(device)
@@ -185,6 +193,8 @@ def run(cfg: dict) -> dict:
         print(f"[epoch {epoch}] batches={nb} loss={tl / max(1, nb):.4f} val_auc={val['auc']:.4f} "
               f"({time.time() - te:.1f}s)", flush=True)
         history[-1]["val_mean_subject_auc"] = val["mean_subject_auc"]
+        if mon_dl is not None:   # diagnostics only: never used to select or stop
+            history[-1]["monitor_auc"] = evaluate(model, mon_dl, device, bundle.n_classes)["auc"]
         score = val["auc"] if not math.isnan(val["auc"]) else val["acc"]
         if score > best + min_delta:
             best, bad = score, 0
@@ -233,6 +243,7 @@ def run(cfg: dict) -> dict:
         "test_best": _public(test_best), "test_last": _public(test_last),
         "location_probe": probe, "best_val": best,
         "best_epoch": max([h["epoch"] for h in history if h.get("best")], default=None),
+        "val_subjects": bundle.val_subjects, "code_dropout": p_drop,
         "spatial": assign.stats, "n_params": n_params, "epochs_run": len(history),
         "runtime_sec": time.time() - t0, "device": str(device),
         "gpu": torch.cuda.get_device_name(0) if device.type == "cuda" else None,

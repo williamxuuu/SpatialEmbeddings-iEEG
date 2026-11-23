@@ -181,6 +181,39 @@ def _halves(n: int) -> tuple[np.ndarray, np.ndarray]:
     return np.arange(n // 2), np.arange(n // 2, n)
 
 
+def _val_people(d: dict, split: str, npc) -> list[int]:
+    """data.val_subjects (cross_subject only): people held out of training whose
+    recording (their trial in subject_trials) is the validation set that picks the
+    epoch. Validation is then cross-person, like the test, and uses no test labels.
+
+      null / []  old behaviour: validation = first half of the test recording
+      auto       the next person after the (single) test person in subject_trials
+                 order, cyclic, skipping anyone whose recording is the same movie as
+                 the test person's (e.g. 4 and 7 both have megamind):
+                 1->2, 2->3, 3->4, 4->10, 7->10, 10->1 for the Lite list
+      [s, ...]   these people
+    """
+    v = d.get("val_subjects")
+    if v in (None, [], "none"):
+        return []
+    if split != "cross_subject":
+        raise ValueError("data.val_subjects only applies to split=cross_subject")
+    if v != "auto":
+        return [int(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
+    order = [int(s) for s, _ in d["subject_trials"]]
+    trial = {int(s): int(t) for s, t in d["subject_trials"]}
+    test = [int(x) for x in d["test_subjects"]]
+    if len(test) != 1:
+        raise ValueError("data.val_subjects=auto needs exactly one test subject")
+    movie = lambda s: npc.BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{s}_{trial[s]}"]
+    i = order.index(test[0])
+    for j in range(1, len(order)):
+        s = order[(i + j) % len(order)]
+        if movie(s) != movie(test[0]):
+            return [s]
+    raise ValueError("no validation person with a different movie")
+
+
 def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     d = cfg["data"]
     root = d.get("root") or os.environ.get("ROOT_DIR_BRAINTREEBANK")
@@ -212,6 +245,8 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     if tfrac < 1.0 and split != "cross_subject":
         raise ValueError("data.train_electrode_frac only applies to split=cross_subject")
     held_out = {int(x) for x in d.get("test_subjects", [])} if split == "cross_subject" else set()
+    val_people = _val_people(d, split, npc)
+    held_out |= set(val_people)   # validation people keep all their electrodes, like test people
     tsub_seed = int(d.get("train_electrode_seed", 0))
     pairs = [(int(s), int(t)) for s, t in d["subject_trials"]]
     lite_pairs = set(npc.NEUROPROBE_LITE_SUBJECT_TRIALS)
@@ -313,7 +348,7 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             stats = stats_cache[(s, t)]
         return CachedWindows(sd, rows, starts, labels, n_out, info.subject_id, ops, mix, stats)
 
-    trains, vals, tests, train_sids = [], [], [], set()
+    trains, vals, tests, monitors, train_sids = [], [], [], [], set()
     kw = dict(eval_name=eval_name, lite=True, output_indices=True)
     if split in ("within_session", "cross_session"):
         for s, t in pairs:
@@ -334,15 +369,29 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
         listed = {s for s, _ in pairs}
         if not test_subjects <= listed:
             raise ValueError(f"test_subjects {sorted(test_subjects)} must be in subject_trials")
+        if test_subjects & set(val_people):
+            raise ValueError(f"data.val_subjects {val_people} overlaps test_subjects {sorted(test_subjects)}")
+        # Movies of the test AND validation recordings: training sessions of these movies
+        # are dropped, so neither held-out person shares a stimulus with training.
         test_movies = {npc.BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{s}_{t}"]
-                       for s, t in pairs if s in test_subjects}
+                       for s, t in pairs if s in test_subjects or s in val_people}
         for s, t in pairs:
             if s not in test_subjects:
                 continue
             ds = npb.BrainTreebankSubjectTrialBenchmarkDataset(subjects_npb[s], t, torch.float32, **kw)
             v, te = _halves(len(ds))
-            vals.append(windows(s, t, ds, v))
+            if val_people:
+                # Model selection uses the validation person; the first half of the test
+                # recording is still evaluated every epoch (monitor), never used to select.
+                monitors.append(windows(s, t, ds, v))
+            else:
+                vals.append(windows(s, t, ds, v))
             tests.append(windows(s, t, ds, te))
+        for s, t in pairs:
+            if s in val_people:
+                ds = npb.BrainTreebankSubjectTrialBenchmarkDataset(subjects_npb[s], t, torch.float32, **kw)
+                vals.append(windows(s, t, ds))
+                print(f"[neuroprobe] validation person {s} trial {t} ({len(ds)} windows); not trained on")
         def _excluded(s, t):
             movie = npc.BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{s}_{t}"]
             return d.get("exclude_test_movie", True) and movie in test_movies
@@ -352,7 +401,8 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
         # k), so k=1 is inside k=2, which is inside k=5, and the same subset is used for
         # every spatial setting.
         eligible = sorted({s for s, t in npc.NEUROPROBE_LITE_SUBJECT_TRIALS
-                           if s in listed and s not in test_subjects and not _excluded(s, t)})
+                           if s in listed and s not in test_subjects and s not in val_people
+                           and not _excluded(s, t)})
         chosen = set(eligible)
         k = d.get("n_train_subjects")
         if k is not None:
@@ -365,7 +415,7 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             chosen = {int(x) for x in order[:k]}
             print(f"[neuroprobe] training people (k={k}): {sorted(chosen)} of {eligible}")
         for s, t in npc.NEUROPROBE_LITE_SUBJECT_TRIALS:
-            if s in test_subjects or s not in listed or s not in chosen:
+            if s in test_subjects or s in val_people or s not in listed or s not in chosen:
                 continue
             if _excluded(s, t):
                 movie = npc.BRAINTREEBANK_SUBJECT_TRIAL_MOVIE_NAME_MAPPING[f"btbank{s}_{t}"]
@@ -382,6 +432,8 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     return DataBundle(ConcatDataset(trains), ConcatDataset(vals), ConcatDataset(tests),
                       infos, train_subjects=train_sids, sfreq=float(sfreq),
                       n_classes=max(2, n_classes),
+                      monitor=ConcatDataset(monitors) if monitors else None,
+                      val_subjects=[f"btb{s:02d}" for s in val_people],
                       description=f"neuroprobe {eval_name} {split} electrodes={which} frac={efrac:g} train_frac={tfrac:g} "
                                   f"reref={reref} zscore={zmode}"
                                   + (f" laplacian_unreferenced={n_unref}" if n_unref else ""))

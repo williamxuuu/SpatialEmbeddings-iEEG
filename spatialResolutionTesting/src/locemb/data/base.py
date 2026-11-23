@@ -39,6 +39,10 @@ class DataBundle:
     sfreq: float
     n_classes: int
     description: str = ""
+    # cross_subject with data.val_subjects: the first half of the test recording,
+    # evaluated every epoch for diagnostics only (never used for model selection).
+    monitor: Dataset | None = None
+    val_subjects: list[str] = field(default_factory=list)   # validation people (not trained on)
 
 
 class SubjectTagged(Dataset):
@@ -86,8 +90,13 @@ class Collator:
                               "coords": FloatTensor (E,3)}
     """
 
-    def __init__(self, spatial_table: dict[str, dict[str, torch.Tensor]]):
+    def __init__(self, spatial_table: dict[str, dict[str, torch.Tensor]], code_dropout: float = 0.0):
+        """code_dropout (training loader only): each electrode of each example gets the
+        <unknown> region code (index 0, weight 1) with this probability. Stops region
+        codes from working as per-person electrode IDs, and trains <unknown> on as many
+        electrodes as the held-out person will have unseen regions."""
         self.table = spatial_table
+        self.code_dropout = float(code_dropout)
 
     def __call__(self, items: list[dict]) -> dict[str, torch.Tensor]:
         B = len(items)
@@ -111,6 +120,11 @@ class Collator:
             idx[b, :e] = s["idx"]
             w[b, :e] = s["w"]
             coords[b, :e] = s["coords"]
+        if self.code_dropout > 0:
+            drop = (torch.rand(B, E) < self.code_dropout) & mask
+            idx[drop] = 0
+            w[drop] = 0.0
+            w[..., 0][drop] = 1.0
         y = torch.tensor([it["y"] for it in items], dtype=torch.long)
         return {"x": x, "mask": mask, "sp_idx": idx, "sp_w": w, "coords": coords, "y": y,
                 "subject": [it["subject"] for it in items]}

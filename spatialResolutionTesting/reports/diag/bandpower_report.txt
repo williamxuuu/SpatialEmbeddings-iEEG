@@ -1,0 +1,101 @@
+====================================================================================================
+A. Per-electrode speech AUC (within session). Columns = bands ['4-8', '8-16', '16-32', '32-64', '64-128', '128-200']
+   frac electrodes with AUC > 0.6 / < 0.4, and the median, per band
+  btb01 sess A  E=129 N=3500  >0.6: [0.    0.    0.047 0.194 0.178 0.124]  <0.4: [0.116 0.171 0.    0.031 0.047 0.   ]  med: [0.484 0.489 0.515 0.528 0.496 0.505]
+  btb01 sess B  E=129 N=3500  >0.6: [0.062 0.047 0.155 0.271 0.186 0.233]  <0.4: [0.078 0.116 0.016 0.016 0.039 0.008]  med: [0.51  0.508 0.542 0.544 0.517 0.556]
+  btb02 sess A  E=135 N=3500  >0.6: [0.    0.    0.111 0.296 0.2   0.03 ]  <0.4: [0.178 0.096 0.    0.    0.    0.   ]  med: [0.478 0.505 0.541 0.556 0.524 0.461]
+  btb02 sess B  E=135 N=3500  >0.6: [0.    0.    0.03  0.193 0.111 0.037]  <0.4: [0.207 0.111 0.    0.    0.    0.   ]  med: [0.466 0.482 0.525 0.532 0.497 0.454]
+  btb03 sess A  E=112 N=3500  >0.6: [0.009 0.009 0.054 0.188 0.179 0.125]  <0.4: [0.223 0.205 0.027 0.036 0.08  0.179]  med: [0.49  0.483 0.513 0.512 0.489 0.467]
+  btb03 sess B  E=112 N=3500  >0.6: [0.    0.    0.027 0.277 0.33  0.196]  <0.4: [0.232 0.223 0.    0.    0.    0.009]  med: [0.46  0.451 0.501 0.551 0.551 0.507]
+  btb04 sess A  E=183 N=3500  >0.6: [0.    0.    0.027 0.027 0.022 0.022]  <0.4: [0.    0.033 0.    0.    0.    0.   ]  med: [0.484 0.469 0.486 0.486 0.498 0.487]
+  btb04 sess B  E=183 N=3500  >0.6: [0.    0.    0.022 0.022 0.022 0.022]  <0.4: [0.    0.016 0.011 0.005 0.    0.   ]  med: [0.484 0.458 0.472 0.478 0.469 0.454]
+  btb07 sess A  E=238 N=3500  >0.6: [0.004 0.004 0.004 0.013 0.013 0.004]  <0.4: [0.    0.    0.    0.    0.008 0.   ]  med: [0.51  0.504 0.49  0.497 0.493 0.473]
+  btb07 sess B  E=238 N=3108  >0.6: [0.    0.004 0.004 0.013 0.025 0.004]  <0.4: [0. 0. 0. 0. 0. 0.]  med: [0.511 0.495 0.492 0.503 0.509 0.52 ]
+  btb10 sess A  E=205 N=3500  >0.6: [0.    0.    0.005 0.029 0.024 0.005]  <0.4: [0.122 0.039 0.01  0.    0.    0.   ]  med: [0.471 0.482 0.485 0.492 0.476 0.472]
+  btb10 sess B  E=205 N=3500  >0.6: [0.063 0.19  0.005 0.044 0.024 0.029]  <0.4: [0.034 0.01  0.005 0.    0.    0.01 ]  med: [0.511 0.551 0.504 0.495 0.466 0.464]
+  Sign agreement of electrode HG AUC between a person's two sessions (same electrodes):
+    btb01: r = 0.738   same sign (|d|>.05 both) = 0.814
+    btb02: r = 0.933   same sign (|d|>.05 both) = 0.733
+    btb03: r = 0.891   same sign (|d|>.05 both) = 0.679
+    btb04: r = 0.852   same sign (|d|>.05 both) = 0.585
+    btb07: r = 0.781   same sign (|d|>.05 both) = 0.681
+    btb10: r = 0.747   same sign (|d|>.05 both) = 0.868
+====================================================================================================
+B. Pooled band power (mean over electrodes): speech AUC per session
+  btb01 sess A: [0.45  0.427 0.574 0.651 0.544 0.547]
+  btb01 sess B: [0.503 0.472 0.666 0.734 0.588 0.692]
+  btb02 sess A: [0.415 0.473 0.619 0.662 0.574 0.476]
+  btb02 sess B: [0.385 0.432 0.592 0.611 0.515 0.454]
+  btb03 sess A: [0.413 0.369 0.547 0.642 0.572 0.52 ]
+  btb03 sess B: [0.362 0.321 0.523 0.716 0.717 0.63 ]
+  btb04 sess A: [0.451 0.416 0.488 0.5   0.512 0.484]
+  btb04 sess B: [0.451 0.396 0.451 0.454 0.469 0.45 ]
+  btb07 sess A: [0.539 0.524 0.465 0.504 0.49  0.455]
+  btb07 sess B: [0.539 0.502 0.464 0.519 0.526 0.544]
+  btb10 sess A: [0.403 0.453 0.45  0.486 0.458 0.427]
+  btb10 sess B: [0.53  0.619 0.544 0.513 0.431 0.447]
+====================================================================================================
+C. Linear cross-subject transfer of pooled features (train on other 5 people, both sessions;
+   features z-scored per session; test on held-out person's test-trial val / test halves)
+  btb01 HG only  : val 0.566  test 0.611
+  btb01 all bands: val 0.569  test 0.536   coef [-0.024 -0.164 -0.011  0.31   0.203 -0.478]
+  btb02 HG only  : val 0.460  test 0.583
+  btb02 all bands: val 0.632  test 0.712   coef [ 0.058 -0.223  0.003  0.366 -0.059 -0.166]
+  btb03 HG only  : val 0.687  test 0.754
+  btb03 all bands: val 0.648  test 0.773   coef [ 0.    -0.136  0.036  0.365 -0.215 -0.044]
+  btb04 HG only  : val 0.436  test 0.502
+  btb04 all bands: val 0.486  test 0.535   coef [ 0.019 -0.149  0.045  0.514 -0.072 -0.263]
+  btb07 HG only  : val 0.575  test 0.479
+  btb07 all bands: val 0.488  test 0.475   coef [-0.016 -0.244  0.106  0.445 -0.019 -0.306]
+  btb10 HG only  : val 0.378  test 0.469
+  btb10 all bands: val 0.466  test 0.456   coef [ 0.096 -0.325  0.08   0.424  0.032 -0.282]
+  (reference: the same with features fit within the held-out person = upper bound for pooled)
+  btb01 within (fit val, score test): 0.810
+  btb02 within (fit val, score test): 0.665
+  btb03 within (fit val, score test): 0.840
+  btb04 within (fit val, score test): 0.576
+  btb07 within (fit val, score test): 0.523
+  btb10 within (fit val, score test): 0.641
+====================================================================================================
+D. Across-person similarity of electrode HG response (AUC-0.5) vs MNI distance
+   (electrode response averaged over the person's two sessions)
+       bin mm  cross-person r  n pairs  within-person r  n pairs
+     0-3   mm            0.083      174            0.829      166
+     3-5   mm            0.264      608            0.839     1580
+     5-8   mm            0.345     1870            0.623     1190
+     8-12  mm            0.294     4634            0.416     2246
+    12-20  mm            0.193    18696            0.367     9724
+    20-40  mm            0.005   100552            0.128    45932
+    40-200 mm           -0.039   697902            0.012   117728
+====================================================================================================
+E. Atlas transfer: predict each held-out electrode's HG response from the mean response of
+   training-person electrodes with the same (hard) region. r over held-out electrodes that
+   have a seen region; coverage = share of held-out electrodes with a seen region.
+/storage/home/hcoda1/6/wxu397/SpatialEmbeddings-iEEG/spatialResolutionTesting/scripts/../src/locemb/spatial/atlases.py:247: UserWarning: 
+The following regions are present in the atlas look-up table,
+but missing from the atlas image:
+
+ index          name
+    42 L Medial_wall
+   117 R Medial_wall
+
+  f = datasets.fetch_atlas_destrieux_2009(data_dir=dd, verbose=0)
+   atlas                   btb01            btb02            btb03            btb04            btb07            btb10   mean r
+   lobes        r=+0.36 cov=0.99 r=+0.19 cov=0.99 r=+0.27 cov=0.90 r=+0.17 cov=0.96 r=-0.02 cov=1.00 r=+0.30 cov=0.95   +0.214
+   destrieux    r=+0.40 cov=0.91 r=+0.26 cov=0.89 r=+0.28 cov=0.79 r=+0.08 cov=0.81 r=-0.06 cov=0.95 r=+0.43 cov=0.76   +0.233
+   schaefer400  r=+0.54 cov=0.81 r=+0.52 cov=0.82 r=+0.65 cov=0.57 r=+0.69 cov=0.70 r=-0.24 cov=0.81 r=+0.54 cov=0.65   +0.449
+   schaefer1000 r=+0.26 cov=0.69 r=+0.56 cov=0.66 r=+0.20 cov=0.48 r=+0.44 cov=0.61 r=-0.04 cov=0.62 r=+0.40 cov=0.45   +0.302
+   grid80       r=+0.24 cov=1.00 r=+0.48 cov=1.00 r=+0.27 cov=1.00 r=+0.25 cov=1.00 r=+0.10 cov=1.00 r=+0.18 cov=1.00   +0.253
+   grid40       r=+0.46 cov=0.84 r=+0.43 cov=0.96 r=+0.50 cov=1.00 r=+0.48 cov=0.86 r=+0.15 cov=0.97 r=+0.38 cov=0.93   +0.399
+   grid20       r=+0.34 cov=0.82 r=+0.27 cov=0.85 r=+0.60 cov=0.65 r=+0.54 cov=0.66 r=+0.13 cov=0.80 r=+0.44 cov=0.67   +0.388
+   grid10       r=+0.44 cov=0.64 r=+0.12 cov=0.39 r=+0.44 cov=0.32 r=+0.43 cov=0.43 r=+0.02 cov=0.45 r=+0.51 cov=0.40   +0.327
+   grid5        r=+0.56 cov=0.20 r=-0.37 cov=0.13 r=+0.38 cov=0.06 r=+0.31 cov=0.10 r=+0.18 cov=0.13 r=+0.77 cov=0.08   +0.305
+====================================================================================================
+F. Drift in the held-out recordings: pooled band power, val half minus test half (in SD),
+   per class, and speech AUC of pooled HG in each half
+  btb01: speech [-0.133 -0.097  0.121  0.044 -0.194 -0.377]  non-speech [-0.063 -0.033  0.138  0.107 -0.024 -0.143]  HG AUC val 0.566 test 0.611
+  btb02: speech [-0.205 -0.23  -0.37  -0.537 -0.643 -0.709]  non-speech [-0.37  -0.348 -0.229 -0.044 -0.236 -0.283]  HG AUC val 0.460 test 0.583
+  btb03: speech [-0.308 -0.041  0.336  0.426  0.177  0.195]  non-speech [-0.583 -0.339  0.625  0.84   0.432  0.285]  HG AUC val 0.687 test 0.754
+  btb04: speech [-0.229 -0.364 -0.226 -0.099 -0.003 -0.012]  non-speech [-0.18  -0.164 -0.101  0.117  0.129  0.081]  HG AUC val 0.436 test 0.502
+  btb07: speech [-0.065 -0.094  0.046  0.122  0.18   0.223]  non-speech [-0.043 -0.224 -0.282 -0.133 -0.142 -0.131]  HG AUC val 0.575 test 0.479
+  btb10: speech [0.151 0.087 0.132 0.43  0.65  0.849]  non-speech [0.271 0.354 0.1   0.814 1.019 1.197]  HG AUC val 0.378 test 0.469
