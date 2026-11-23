@@ -54,12 +54,12 @@ def main(d):
     t = g[["sel", "last", "oracle", "sel_epoch", "track"]].mean()
     t["sel<0.5"] = g.sel.apply(lambda x: (x < 0.5).mean()); t["last<0.5"] = g["last"].apply(lambda x: (x < 0.5).mean())
     t["n"] = g.size()
-    print(t.round(3).to_markdown(), "\n")
+    print(t.round(3).to_string(), "\n")
     print("## Per person, `sel` (mean over seeds)\n")
-    print(df.pivot_table(index="arm", columns="fold", values="sel", aggfunc="mean").round(3).to_markdown(), "\n")
+    print(df.pivot_table(index="arm", columns="fold", values="sel", aggfunc="mean").round(3).to_string(), "\n")
     print("## Q1 selection: sel - last (mean, share > 0)\n")
     df["q1"] = df.sel - df["last"]
-    print(df.groupby("arm").q1.agg(["mean", lambda x: (x > 0).mean()]).round(3).to_markdown(), "\n")
+    print(df.groupby("arm").q1.agg(["mean", lambda x: (x > 0).mean()]).round(3).to_string(), "\n")
     print("## Q2 code dropout: d50 - d0, paired on person x encoding x seed\n")
     k = ["fold", "spatial", "seed"]
     a = df[df["drop"] == "d50"].set_index(k); b = df[df["drop"] == "d0"].set_index(k)
@@ -71,10 +71,10 @@ def main(d):
     print("\n## Q3 noise: seed SD of `sel` per (person, arm), median over people\n")
     sd = df.groupby(["arm", "fold"]).sel.std().groupby("arm").median()
     sdl = df.groupby(["arm", "fold"])["last"].std().groupby("arm").median()
-    print(pd.DataFrame({"sd_sel": sd, "sd_last": sdl}).round(3).to_markdown(), "\n")
+    print(pd.DataFrame({"sd_sel": sd, "sd_last": sdl}).round(3).to_string(), "\n")
     print(f"Before the fix: 0.07-0.13 (last epoch, 5 training people, 40 epochs).\n")
     print("## Validation person per fold\n")
-    print(df.groupby("fold").val_people.first().to_markdown())
+    print(df.groupby("fold").val_people.first().to_string())
 
 
 if __name__ == "__main__":
