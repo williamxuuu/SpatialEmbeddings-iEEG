@@ -142,13 +142,48 @@ def xsubj(dirs: list[str], out: str) -> str:
     return text
 
 
+def xsoft(dirs: list[str], out: str) -> str:
+    """configs/sweeps/main_soft_xsess.yaml (+ results/main_xsess for the shared
+    none / electrode_id / grid baselines). Selected-epoch test AUC."""
+    df = load_runs(dirs)
+    L = ["# Soft vs hard regions, within person (main protocol)\n",
+         "Outcome: test AUC at the selected (early-stopped) epoch. Contrasts paired on person x seed, "
+         "seed mean per person, exact sign-flip over people. Analysis fixed in "
+         "configs/sweeps/main_soft_xsess.yaml.\n"]
+    if df.empty:
+        L.append("No runs yet.")
+    else:
+        keep = df["spatial"].str.startswith("schaefer") | df["spatial"].isin(
+            ["none", "electrode_id", "grid10", "grid20"])
+        d = df[keep]
+        L.append("Mean AUC over people and seeds:\n")
+        L.append(tab(d.pivot_table(index="spatial", columns="density", values="auc", aggfunc="mean")
+                     [sorted(d["density"].unique(), key=ad.level)].round(4)))
+        for atlas in ("schaefer400", "schaefer1000"):
+            L.append(f"## {atlas}\n\nS1 soft - hard:")
+            L += contrast(d, f"{atlas}_gauss3", f"{atlas}_hard")
+            L.append("\nS2 soft - random neighbours:")
+            L += contrast(d, f"{atlas}_gauss3", f"{atlas}_gauss3_randnbr")
+            L.append("\nS3 hard - per-electrode tags:")
+            L += contrast(d, f"{atlas}_hard", "electrode_id")
+            L.append("\nsoft - none:")
+            L += contrast(d, f"{atlas}_gauss3", "none")
+            L.append("")
+        sd = d.groupby(["spatial", "density", "subject"])["auc"].std(ddof=1)
+        L.append(f"Seed SD of AUC per (encoding, density, person): median {sd.median():.4f} (planned ~0.021).\n")
+    text = "\n".join(L)
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    open(out, "w").write(text)
+    return text
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("kind", choices=["xsess", "xsubj"])
+    ap.add_argument("kind", choices=["xsess", "xsubj", "xsoft"])
     ap.add_argument("results", nargs="+")
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
-    print((xsess if a.kind == "xsess" else xsubj)(a.results, a.out))
+    print({"xsess": xsess, "xsubj": xsubj, "xsoft": xsoft}[a.kind](a.results, a.out))
 
 
 if __name__ == "__main__":

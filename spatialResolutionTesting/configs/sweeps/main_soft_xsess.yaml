@@ -1,0 +1,59 @@
+# Experiment 2 under the main protocol (decided 2026-11-26): soft vs hard regions at
+# fine resolution, WITHIN PERSON, on the same training-data density axis as
+# configs/sweeps/main_xsess.yaml (identical settings, so its none / electrode_id /
+# grid runs are the shared baselines; the report reads both result folders).
+#
+# Earlier result (softRegionTesting/reports/phase0_soft.md, old 40-epoch last-epoch
+# recipe, electrode density): soft - hard +0.02 to +0.04 in 3/4 cells, inside seed
+# noise; soft with random neighbours ~ real soft at Schaefer 1000 (within person any
+# code can act as an electrode tag). Seed SD per person at the best checkpoint was
+# 0.021 vs 0.035 at the last epoch, hence early stopping here; soft - hard per-run SD
+# ~0.03, so 8 seeds give ~+-0.012 per person. People, not seeds, are the limit.
+#
+# Encodings: Schaefer 400 / 1000 x {hard, gauss3 (soft, sigma 3 mm), gauss3_randnbr
+# (soft weights spread over RANDOM regions: does the RIGHT neighbourhood matter)}.
+# 3 densities x 6 encodings x 8 seeds = 144 runs.
+#
+# Analysis, fixed before running (scripts/main_report.py xsoft), per atlas and density,
+# paired on person x seed, seed mean per person, exact sign-flip over the 6 people:
+#   S1 soft - hard          predicted > 0, more so at lower density and at Schaefer 1000
+#   S2 soft - randnbr       predicted > 0 (the right neighbours matter)
+#   S3 hard - electrode_id  (from main_xsess) does an anatomical code beat a bare tag?
+#   S4 hard / soft vs grid cubes of similar size (descriptive)
+config: configs/neuroprobe_v2.yaml
+exp_name: main_soft_xsess
+overrides:
+  model.name: transformer
+  data.split: cross_session
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 40
+  train.min_epochs: 20
+  train.patience: 10
+  train.select: best
+axes:
+  density:
+    w10:  {data.train_window_frac: 0.1}
+    w30:  {data.train_window_frac: 0.3}
+    w100: {data.train_window_frac: 1.0}
+  spatial:
+    schaefer400_hard:            {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    schaefer400_gauss3:          {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    schaefer400_gauss3_randnbr:  {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+    schaefer1000_hard:           {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: hard}
+    schaefer1000_gauss3:         {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    schaefer1000_gauss3_randnbr: {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3, spatial.control: random_neighbors}
+  seed:
+    "0": {seed: 0, data.train_window_seed: 0}
+    "1": {seed: 1, data.train_window_seed: 1}
+    "2": {seed: 2, data.train_window_seed: 2}
+    "3": {seed: 3, data.train_window_seed: 3}
+    "4": {seed: 4, data.train_window_seed: 4}
+    "5": {seed: 5, data.train_window_seed: 5}
+    "6": {seed: 6, data.train_window_seed: 6}
+    "7": {seed: 7, data.train_window_seed: 7}
