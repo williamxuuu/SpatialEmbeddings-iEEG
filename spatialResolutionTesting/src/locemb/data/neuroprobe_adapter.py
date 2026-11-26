@@ -181,6 +181,28 @@ def _halves(n: int) -> tuple[np.ndarray, np.ndarray]:
     return np.arange(n // 2), np.arange(n // 2, n)
 
 
+N_TIME_CHUNKS = 20
+
+
+def train_window_subset(starts: np.ndarray, frac: float, key: str) -> np.ndarray:
+    """data.train_window_frac: indices of the training windows kept when only a
+    fraction of the training recording is used (the within-person density axis).
+
+    The recording is cut, by window start time, into N_TIME_CHUNKS contiguous chunks
+    and round(frac * N_TIME_CHUNKS) of them are kept (at least one), chosen at random
+    from `key` (person, recording, data.train_window_seed). Whole chunks rather than
+    scattered windows, so 10% means about 10% of the recording's time and stimulus,
+    not 10% of windows that each overlap their neighbours. The subset depends only on
+    the key, never on the spatial setting, so every encoding trains on the same data."""
+    if frac >= 1.0:
+        return np.arange(len(starts))
+    order = np.argsort(starts, kind="stable")
+    chunks = np.array_split(order, N_TIME_CHUNKS)
+    k = max(1, int(round(frac * N_TIME_CHUNKS)))
+    pick = np.random.default_rng(zlib.crc32(key.encode())).choice(N_TIME_CHUNKS, size=k, replace=False)
+    return np.sort(np.concatenate([chunks[i] for i in sorted(pick)]))
+
+
 def _val_people(d: dict, split: str, npc) -> list[int]:
     """data.val_subjects (cross_subject only): people held out of training whose
     recording (their trial in subject_trials) is the validation set that picks the
@@ -244,6 +266,12 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
         raise ValueError(f"data.train_electrode_frac must be in (0, 1], not {tfrac}")
     if tfrac < 1.0 and split != "cross_subject":
         raise ValueError("data.train_electrode_frac only applies to split=cross_subject")
+    # Within-person density knob: keep a fraction of each TRAINING recording's time
+    # (see train_window_subset). Validation and test windows are never thinned.
+    wfrac = float(d.get("train_window_frac", 1.0))
+    if not 0.0 < wfrac <= 1.0:
+        raise ValueError(f"data.train_window_frac must be in (0, 1], not {wfrac}")
+    wsub_seed = int(d.get("train_window_seed", 0))
     held_out = {int(x) for x in d.get("test_subjects", [])} if split == "cross_subject" else set()
     val_people = _val_people(d, split, npc)
     held_out |= set(val_people)   # validation people keep all their electrodes, like test people
@@ -332,10 +360,17 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                 read_plan[(s, t)] = (sd.rows(labels), None)
         return read_plan[(s, t)]
 
-    def windows(s: int, t: int, ds, idx: np.ndarray | None = None) -> CachedWindows:
+    n_train_windows: dict[str, int] = {}
+
+    def windows(s: int, t: int, ds, idx: np.ndarray | None = None, train: bool = False) -> CachedWindows:
         starts, labels, n_raw = _indices(ds)
         if idx is not None:
             starts, labels = starts[idx], labels[idx]
+        if train and wfrac < 1.0:
+            keep = train_window_subset(starts, wfrac, f"twin_{s}_{t}_{wsub_seed}")
+            starts, labels = starts[keep], labels[keep]
+        if train:
+            n_train_windows[f"btb{s:02d}_{t}"] = int(len(starts))
         sd = session(s, t)
         info = subject_info(s)
         n_out = int(round(n_raw * sd.ratio))
@@ -360,7 +395,7 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             else:
                 fold = npb.generate_splits_cross_session(subj, t, **kw)[0]
                 train_t = [tt for ss, tt in npc.NEUROPROBE_LITE_SUBJECT_TRIALS if ss == s and tt != t][0]
-            trains.append(windows(s, train_t, fold["train_dataset"]))
+            trains.append(windows(s, train_t, fold["train_dataset"], train=True))
             vals.append(windows(s, t, fold["val_dataset"]))
             tests.append(windows(s, t, fold["test_dataset"]))
             train_sids.add(f"btb{s:02d}")
@@ -422,7 +457,7 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                 print(f"[neuroprobe] skip train sub {s} trial {t}: same movie as a test session ({movie})")
                 continue
             ds = npb.BrainTreebankSubjectTrialBenchmarkDataset(subjects_npb[s], t, torch.float32, **kw)
-            trains.append(windows(s, t, ds))
+            trains.append(windows(s, t, ds, train=True))
             train_sids.add(f"btb{s:02d}")
     else:
         raise ValueError(f"Unknown split {split!r}")
@@ -435,5 +470,6 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                       monitor=ConcatDataset(monitors) if monitors else None,
                       val_subjects=[f"btb{s:02d}" for s in val_people],
                       description=f"neuroprobe {eval_name} {split} electrodes={which} frac={efrac:g} train_frac={tfrac:g} "
+                                  f"train_window_frac={wfrac:g} train_windows={n_train_windows} "
                                   f"reref={reref} zscore={zmode}"
                                   + (f" laplacian_unreferenced={n_unref}" if n_unref else ""))

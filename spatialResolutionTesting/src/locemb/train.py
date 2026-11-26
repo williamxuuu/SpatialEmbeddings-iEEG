@@ -87,6 +87,51 @@ def evaluate(model, loader, device, n_classes):
     return out
 
 
+def extract_features(model, loader, device):
+    """Frozen readout vectors (N, d), labels and subject ids for every window."""
+    model.eval()
+    fs, ys, subs = [], [], []
+    with torch.no_grad():
+        for batch in loader:
+            b = {k: (v.to(device, non_blocking=True) if torch.is_tensor(v) else v) for k, v in batch.items()}
+            fs.append(model.features(b).float().cpu().numpy())
+            ys.append(batch["y"].numpy()); subs += batch["subject"]
+    return np.concatenate(fs), np.concatenate(ys), np.array(subs)
+
+
+def calibrate(model, calib_loader, test_loader, device, fracs, C: float = 1.0) -> dict:
+    """Calibration on a new person (train.calibrate, cross_subject only).
+
+    The trained model is frozen; only a new linear readout (standardised features,
+    L2 logistic regression with fixed C, chosen before any result) is fit on the
+    first `frac` of the person's calibration windows (the first half of their test
+    recording, in recording order) and scored on the test half. The location codes
+    and features cannot adapt, so what transfers is what the model learned from the
+    training people. frac -> {"auc", "n_calib", "per_subject_auc"}."""
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    Xc, yc, sc = extract_features(model, calib_loader, device)
+    Xt, yt, st = extract_features(model, test_loader, device)
+    out = {}
+    for frac in fracs:
+        per, ns = {}, {}
+        for s in np.unique(st):
+            ic = np.nonzero(sc == s)[0]
+            ic = ic[:max(2, int(round(float(frac) * len(ic))))]
+            it = st == s
+            if len(np.unique(yc[ic])) < 2 or len(np.unique(yt[it])) < 2:
+                per[s] = float("nan"); ns[s] = int(len(ic)); continue
+            clf = make_pipeline(StandardScaler(), LogisticRegression(C=C, max_iter=5000))
+            clf.fit(Xc[ic], yc[ic])
+            per[s] = float(roc_auc_score(yt[it], clf.predict_proba(Xt[it])[:, 1]))
+            ns[s] = int(len(ic))
+        vals = [v for v in per.values() if not math.isnan(v)]
+        out[f"{float(frac):g}"] = {"auc": float(np.mean(vals)) if vals else float("nan"),
+                                   "per_subject_auc": per, "n_calib": ns}
+    return out
+
+
 def _public(ev: dict) -> dict:
     return {k: v for k, v in ev.items() if not k.startswith("_")}
 
@@ -218,6 +263,22 @@ def run(cfg: dict) -> dict:
         model.load_state_dict(last_state)
     test = test_last if select == "last" else test_best
 
+    # Calibration on the new person (cross_subject): freeze the selected model, refit
+    # only a linear readout on part of the held-out person's first half, test on the
+    # second half. Zero-shot (test) and calibrated numbers come from the same model.
+    calib = None
+    cal_fracs = tr.get("calibrate") or []
+    if cal_fracs:
+        if cfg["data"].get("split") != "cross_subject":
+            raise ValueError("train.calibrate only applies to data.split=cross_subject")
+        if not hasattr(model, "features"):
+            raise ValueError("train.calibrate needs a model with .features() (transformer)")
+        cal_ds = bundle.monitor if bundle.monitor is not None else bundle.val
+        calib = calibrate(model, mk(cal_ds, False), test_dl, device, cal_fracs,
+                          C=float(tr.get("calibrate_C", 1.0)))
+        print("[calibrate] " + "  ".join(f"{k}: {v['auc']:.4f} (n={sum(v['n_calib'].values())})"
+                                         for k, v in calib.items()), flush=True)
+
     # How much does the trained model rely on location? Re-test with each
     # subject's location codes shuffled among its electrodes.
     probe = None
@@ -241,7 +302,9 @@ def run(cfg: dict) -> dict:
         "test_per_subject_auc": test["per_subject_auc"],
         "test_mean_subject_auc": test["mean_subject_auc"],
         "test_best": _public(test_best), "test_last": _public(test_last),
-        "location_probe": probe, "best_val": best,
+        "location_probe": probe, "calibration": calib, "best_val": best,
+        "n_train_windows": len(bundle.train),
+        "train_window_frac": float(cfg["data"].get("train_window_frac", 1.0) or 1.0),
         "best_epoch": max([h["epoch"] for h in history if h.get("best")], default=None),
         "val_subjects": bundle.val_subjects, "code_dropout": p_drop,
         "spatial": assign.stats, "n_params": n_params, "epochs_run": len(history),

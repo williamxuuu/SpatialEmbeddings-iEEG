@@ -33,6 +33,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from runs_table import load_runs  # noqa: E402
 
 H_MAX = 80.0  # x = log2(H_MAX / h): 0 for 80 mm, 4 for 5 mm
+# Which test AUC is the outcome: "last" (last epoch; the cross-subject protocol) or
+# "selected" (the run's selected epoch, test_auc; within-person early stopping).
+OUTCOME = "last"
+
+
+def _auc_col(df: pd.DataFrame) -> str:
+    if OUTCOME == "selected":
+        return "auc"
+    return "auc_last" if "auc_last" in df and df["auc_last"].notna().all() else "auc"
 
 
 def cube_mm(name: str):
@@ -54,7 +63,7 @@ def signflip(v: np.ndarray) -> tuple[float, float, int, int]:
 
 def seed_gains(df: pd.DataFrame) -> pd.DataFrame:
     """One row per (subject, density, seed, h): paired gain over 'none' and coverage."""
-    auc = "auc_last" if "auc_last" in df and df["auc_last"].notna().all() else "auc"
+    auc = _auc_col(df)
     df = df[df["subject"] == "btb" + df["fold"].str[2:]].copy() if "fold" in df else df.copy()
     base = (df[df["spatial"] == "none"].set_index(["subject", "density", "seed"])[auc]
             .rename("auc_none"))
@@ -69,7 +78,7 @@ def seed_gains(df: pd.DataFrame) -> pd.DataFrame:
 
 def gains(df: pd.DataFrame) -> pd.DataFrame:
     """One row per (subject, density, h): seed-mean paired gain over 'none', and coverage."""
-    auc = "auc_last" if "auc_last" in df and df["auc_last"].notna().all() else "auc"
+    auc = _auc_col(df)
     cub = seed_gains(df)
     g = (cub
          .groupby(["subject", "density", "h"])
@@ -243,10 +252,12 @@ def plot(g: pd.DataFrame, path: str):
 
 
 def report(df: pd.DataFrame, out_md: str, out_png: str | None) -> str:
+    what = ("test AUC at the selected (early-stopped) epoch" if OUTCOME == "selected"
+            else "held-out person's test AUC at the last epoch")
     L = ["# Density x resolution\n",
-         "Outcome: held-out person's test AUC at the last epoch. Gain = AUC(cube) - AUC(none),"
+         f"Outcome: {what}. Gain = AUC(cube) - AUC(none),"
          " paired on person, density and seed, then averaged over seeds. Analysis fixed in"
-         " configs/sweeps/density_resolution.yaml.\n"]
+         " the sweep file header before any run.\n"]
     if df.empty:
         L.append("No runs yet.")
         return "\n".join(L)
@@ -321,9 +332,12 @@ def main(argv=None):
     ap.add_argument("results", nargs="+")
     ap.add_argument("--out", default="reports/density_resolution.md")
     ap.add_argument("--no-plot", action="store_true")
+    ap.add_argument("--outcome", choices=["last", "selected"], default="last")
     ap.add_argument("--noise-only", action="store_true",
                     help="print only the seed SD of gain (for the staged-seeds rule), no effects")
     a = ap.parse_args(argv)
+    global OUTCOME
+    OUTCOME = a.outcome
     if a.noise_only:
         sg = seed_gains(load_runs(a.results))
         sd = sg.groupby(["subject", "density", "h"])["gain"].std(ddof=1)

@@ -1,0 +1,32 @@
+# Smoke test for main_xsess + main_xsubj (2026-11-26). Not a result.
+# 10 real-data runs, all at once (lesson from 2026-11-22: a solo smoke test missed
+# the Lustre stall that only appeared under ~10 concurrent jobs). Few epochs, full
+# batches, so epoch times are real. scripts/check_smoke_main.py gates the sweeps on:
+# every run finished; epoch time under concurrency; train_window_frac keeps the right
+# share of windows; electrode_id / shuffled / grid5 build; calibration gives finite AUCs.
+config: configs/neuroprobe_v2.yaml
+exp_name: smoke_main
+overrides:
+  model.name: transformer
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 3
+  train.min_epochs: 3
+axes:
+  case:
+    xsess_w100_none:     {data.split: cross_session, data.train_window_frac: 1.0, spatial.type: none, train.select: best}
+    xsess_w100_grid20:   {data.split: cross_session, data.train_window_frac: 1.0, spatial.type: region, spatial.atlas: grid20, train.select: best}
+    xsess_w100_eid:      {data.split: cross_session, data.train_window_frac: 1.0, spatial.type: electrode_id, train.select: best}
+    xsess_w100_shuf:     {data.split: cross_session, data.train_window_frac: 1.0, spatial.type: region, spatial.atlas: grid20, spatial.control: shuffle_electrodes, train.select: best}
+    xsess_w30_grid5:     {data.split: cross_session, data.train_window_frac: 0.3, spatial.type: region, spatial.atlas: grid5, train.select: best}
+    xsess_w10_none:      {data.split: cross_session, data.train_window_frac: 0.1, spatial.type: none, train.select: best}
+    xsess_w10_grid20:    {data.split: cross_session, data.train_window_frac: 0.1, spatial.type: region, spatial.atlas: grid20, train.select: best}
+    xsubj_ho03_none:     {data.split: cross_subject, data.test_subjects: [3], spatial.type: none, train.select: last, train.calibrate: [0.1, 0.25, 1.0]}
+    xsubj_ho03_grid20:   {data.split: cross_subject, data.test_subjects: [3], spatial.type: region, spatial.atlas: grid20, train.select: last, train.calibrate: [0.1, 0.25, 1.0]}
+    xsubj_ho07_grid10:   {data.split: cross_subject, data.test_subjects: [7], spatial.type: region, spatial.atlas: grid10, train.select: last, train.calibrate: [0.1, 0.25, 1.0]}
+  seed: [0]

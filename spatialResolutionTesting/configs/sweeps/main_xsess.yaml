@@ -1,0 +1,88 @@
+# MAIN EXPERIMENT (decided 2026-11-26): density x resolution WITHIN PERSON.
+# Does the best spatial resolution move with how much training data there is?
+#
+# Setting: cross-session (Neuroprobe's "same subject, different movie"). One model
+# for all 6 Lite people; each is tested on their second Lite movie. Region codes are
+# shared across people, so a code pools every electrode (all people) in its cube.
+# Why within person: cross-person zero-shot is too noisy for ~0.03 effects (seed SD
+# 0.07-0.13, people 4/7/10 near chance, field-wide ~0.55-0.58; see
+# reports/diag/collapse_diagnosis.md, reports/fix_pilot.md). Within person: seed SD
+# ~0.025 (Phase 0, r2_stft_car), every person learns.
+#
+# Density = fraction of each person's TRAINING recording kept (data.train_window_frac:
+# 20 contiguous time chunks, round(frac*20) kept, chosen by seed; validation and test
+# never thinned). The user chose this over electrodes-per-region: a per-electrode ID
+# tag gets the same data however many electrodes share a region, while less recording
+# means less data for EVERY code, the bias-variance setting where the optimum cube
+# size should move (partition estimators: h* ~ n^(-1/(d+2))).
+#   w10 / w30 / w100 = 10% / 30% / 100% of the training movie.
+# Encodings: none; cubes 80/40/20/10/5 mm (pure resolution, no anatomy); controls:
+#   electrode_id    one code per electrode: the finest possible "resolution", no sharing
+#   grid20_shuffled grid20 codes shuffled among each person's electrodes: same codes and
+#                   sharing across people, wrong locations (does LOCATION matter, or
+#                   just having shared tags?)
+# 3 densities x 8 encodings x 8 seeds = 192 runs.
+#
+# Training (changes agreed 2026-11-26): early stopping with a floor, as in the
+# literature (BaRISTA reruns: patience 15 / up to 100 epochs). Max 40 epochs, never
+# stop before epoch 20 (the old pilots left the loss plateau ~epochs 17-18), then stop
+# after 10 epochs without a validation gain; report the best-validation checkpoint.
+# Validation = first half of the test movie, test = second half (Neuroprobe's own
+# convention; within person, no other person is involved). Every epoch's validation
+# AUC is saved, so other stopping rules can be checked afterwards. Equal epochs at
+# every density (so w10 gets ~10x fewer updates); runs that never leave the plateau
+# are reported, not dropped.
+#
+# Power: per-person seed SD ~0.025 within person => paired gain SD ~0.035; 8 seeds
+# give SE ~0.012 per person per cell.
+#
+# Analysis, fixed before running (scripts/main_report.py xsess -> analyze_density.py
+# --outcome selected, plus controls):
+#   gain(h) = AUC(cube h) - AUC(none), same person, density, seed; seed mean.
+#   H1 (primary): slope of gain on x = log2(80/h); interaction slope(w100) - slope(w10),
+#      predicted > 0 (finer pays off more with more data). Permutation test of density
+#      labels within person x seed; exact sign-flip over the 6 people (p >= 0.031).
+#   H2: best cube size per density (vertex regression, bootstrap over people);
+#      predicted to move finer with more data.
+#   Controls, per density, sign-flip over people: grid20 - grid20_shuffled (location
+#      vs shared tags); electrode_id - none; best cube - electrode_id (does sharing beat
+#      no sharing, and does that reverse with more data?).
+config: configs/neuroprobe_v2.yaml
+exp_name: main_xsess
+overrides:
+  model.name: transformer
+  data.split: cross_session
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 40
+  train.min_epochs: 20
+  train.patience: 10
+  train.select: best
+axes:
+  density:
+    w10:  {data.train_window_frac: 0.1}
+    w30:  {data.train_window_frac: 0.3}
+    w100: {data.train_window_frac: 1.0}
+  spatial:
+    none:            {spatial.type: none}
+    grid80:          {spatial.type: region, spatial.atlas: grid80}
+    grid40:          {spatial.type: region, spatial.atlas: grid40}
+    grid20:          {spatial.type: region, spatial.atlas: grid20}
+    grid10:          {spatial.type: region, spatial.atlas: grid10}
+    grid5:           {spatial.type: region, spatial.atlas: grid5}
+    electrode_id:    {spatial.type: electrode_id}
+    grid20_shuffled: {spatial.type: region, spatial.atlas: grid20, spatial.control: shuffle_electrodes}
+  seed:
+    "0": {seed: 0, data.train_window_seed: 0}
+    "1": {seed: 1, data.train_window_seed: 1}
+    "2": {seed: 2, data.train_window_seed: 2}
+    "3": {seed: 3, data.train_window_seed: 3}
+    "4": {seed: 4, data.train_window_seed: 4}
+    "5": {seed: 5, data.train_window_seed: 5}
+    "6": {seed: 6, data.train_window_seed: 6}
+    "7": {seed: 7, data.train_window_seed: 7}

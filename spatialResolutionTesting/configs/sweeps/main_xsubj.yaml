@@ -1,0 +1,57 @@
+# SECONDARY ARM (decided 2026-11-26): new people, zero-shot AND calibrated, from the
+# same runs. Small on purpose: the main density x resolution test is within person
+# (configs/sweeps/main_xsess.yaml); this asks whether its picture carries over to a
+# person the model never trained on.
+#
+# Leave-one-person-out over the 6 Lite people, trained on the other 5 (training
+# recordings of the test person's movie dropped, as before). No validation person:
+# the fix pilot showed epoch selection on another person does not help (0.555 vs
+# 0.567 last epoch; pooled over 5 people 0.561), because people peak at different
+# epochs. So (agreed 2026-11-26) a FIXED 20-epoch schedule (cosine LR to zero) and the
+# last epoch is reported, decided before any result.
+#
+# Per run, two numbers from one model:
+#   zero-shot   test AUC on the second half of the new person's recording
+#   calibrated  model frozen; a new linear readout (standardised features, logistic
+#               regression, C = 1, fixed in advance) fit on the first 10% / 25% / 100%
+#               of the FIRST half (~175 / 440 / 1750 windows; 10% ~ the first 13 min),
+#               scored on the same second half. Codes and features cannot adapt, so a
+#               gain from location here is cross-person transfer (as in PopT-style
+#               held-out-subject evaluation, but with the backbone frozen).
+# Encodings: none + cubes 40 / 20 / 10 mm (the range where the band-power diagnostic
+# put the transfer peak). 6 people x 4 encodings x 6 seeds = 144 runs.
+#
+# Analysis, fixed before running (scripts/main_report.py xsubj): per encoding, mean
+# zero-shot and calibrated AUC; gain over none per person (seed mean), exact sign-flip
+# over the 6 people; share of runs below 0.5; seed SD. Reported per person, since
+# people 4/7/10 have little transferable signal. Descriptive, not a primary test.
+config: configs/neuroprobe_v2.yaml
+exp_name: main_xsubj
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 20
+  train.min_epochs: 20
+  train.select: last
+  train.calibrate: [0.1, 0.25, 1.0]
+axes:
+  fold:
+    ho01: {data.test_subjects: [1]}
+    ho02: {data.test_subjects: [2]}
+    ho03: {data.test_subjects: [3]}
+    ho04: {data.test_subjects: [4]}
+    ho07: {data.test_subjects: [7]}
+    ho10: {data.test_subjects: [10]}
+  spatial:
+    none:   {spatial.type: none}
+    grid40: {spatial.type: region, spatial.atlas: grid40}
+    grid20: {spatial.type: region, spatial.atlas: grid20}
+    grid10: {spatial.type: region, spatial.atlas: grid10}
+  seed: [0, 1, 2, 3, 4, 5]

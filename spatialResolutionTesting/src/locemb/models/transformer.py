@@ -91,6 +91,11 @@ class PopulationTransformer(nn.Module):
         self.P, self.d = n_patches, d
 
     def forward(self, batch):
+        return self.head(self.features(batch))
+
+    def features(self, batch):
+        """The normalised readout vector the linear head sees (B, d). Used by
+        calibration, which refits only a linear readout on these, model frozen."""
         x, mask = batch["x"], batch["mask"]                     # (B,E,T), (B,E)
         B, E, T = x.shape
         tok = self.patch(x.reshape(B * E, T)).reshape(B, E, self.P, self.d)
@@ -105,4 +110,4 @@ class PopulationTransformer(nn.Module):
             z = (h[:, 1:] * keep).sum(1) / keep.sum(1).clamp_min(1)
         else:
             z = h[:, 0]
-        return self.head(self.norm(z))
+        return self.norm(z)
