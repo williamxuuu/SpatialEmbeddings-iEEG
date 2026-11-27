@@ -43,6 +43,10 @@ class DataBundle:
     # evaluated every epoch for diagnostics only (never used for model selection).
     monitor: Dataset | None = None
     val_subjects: list[str] = field(default_factory=list)   # validation people (not trained on)
+    # split=heldout_shafts: extra test sets scored with the selected model
+    # ("train_shafts", "all_shafts") and per-held-out-pseudo-subject geometry.
+    extra_tests: dict = field(default_factory=dict)
+    heldout_info: dict = field(default_factory=dict)
 
 
 class SubjectTagged(Dataset):

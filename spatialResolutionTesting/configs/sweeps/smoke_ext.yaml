@@ -1,0 +1,32 @@
+# Smoke test for heldout_shafts + main_xsubj_ext (2026-11-27). Not a result.
+# 10 real-data runs at once (concurrency catches I/O stalls), 3 epochs.
+# scripts/check_smoke_ext.py gates both sweeps on: every run finished, finite losses
+# and AUCs, epoch time under concurrency; held-out runs: test subjects are the btbXXh
+# pseudo-subjects, no shaft both trained and held out, s25 keeps ~1/4 of the training
+# shafts, all extra test inputs present, coverage in [0, 1]; new-person runs:
+# calibration keys, e30 keeps ~30% of training electrodes.
+config: configs/neuroprobe_v2.yaml
+exp_name: smoke_ext
+overrides:
+  model.name: transformer
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  model.readout: cls
+  train.epochs: 3
+  train.min_epochs: 3
+axes:
+  case:
+    held_s100_none:    {data.split: heldout_shafts, data.heldout_shaft_frac: 0.25, data.train_shaft_frac: 1.0, data.heldout_split: 0, preprocess.reref: laplacian, train.select: best, spatial.type: none}
+    held_s100_grid20:  {data.split: heldout_shafts, data.heldout_shaft_frac: 0.25, data.train_shaft_frac: 1.0, data.heldout_split: 0, preprocess.reref: laplacian, train.select: best, spatial.type: region, spatial.atlas: grid20}
+    held_s25_grid5:    {data.split: heldout_shafts, data.heldout_shaft_frac: 0.25, data.train_shaft_frac: 0.25, data.heldout_split: 0, preprocess.reref: laplacian, train.select: best, spatial.type: region, spatial.atlas: grid5}
+    held_s50_s400soft: {data.split: heldout_shafts, data.heldout_shaft_frac: 0.25, data.train_shaft_frac: 0.5, data.heldout_split: 3, preprocess.reref: laplacian, train.select: best, spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    held_s100_grid80:  {data.split: heldout_shafts, data.heldout_shaft_frac: 0.25, data.train_shaft_frac: 1.0, data.heldout_split: 5, preprocess.reref: laplacian, train.select: best, spatial.type: region, spatial.atlas: grid80}
+    xsubj_e30_none:    {data.split: cross_subject, data.test_subjects: [2], data.train_electrode_frac: 0.3, preprocess.reref: car, train.select: last, train.calibrate: [0.1, 0.25, 1.0], spatial.type: none}
+    xsubj_e30_grid5:   {data.split: cross_subject, data.test_subjects: [3], data.train_electrode_frac: 0.3, preprocess.reref: car, train.select: last, train.calibrate: [0.1, 0.25, 1.0], spatial.type: region, spatial.atlas: grid5}
+    xsubj_e100_grid80: {data.split: cross_subject, data.test_subjects: [10], preprocess.reref: car, train.select: last, train.calibrate: [0.1, 0.25, 1.0], spatial.type: region, spatial.atlas: grid80}
+    xsubj_e100_s400h:  {data.split: cross_subject, data.test_subjects: [1], preprocess.reref: car, train.select: last, train.calibrate: [0.1, 0.25, 1.0], spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    xsubj_e100_s1000s: {data.split: cross_subject, data.test_subjects: [7], preprocess.reref: car, train.select: last, train.calibrate: [0.1, 0.25, 1.0], spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3}
+  seed: [0]

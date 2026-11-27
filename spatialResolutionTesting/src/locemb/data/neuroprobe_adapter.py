@@ -203,6 +203,22 @@ def train_window_subset(starts: np.ndarray, frac: float, key: str) -> np.ndarray
     return np.sort(np.concatenate([chunks[i] for i in sorted(pick)]))
 
 
+def shaft_of(label: str) -> str:
+    """sEEG shaft name of a contact label: the text before the trailing contact
+    number (F3aOF6 -> F3aOF). A label without a trailing number is its own shaft."""
+    m = _CONTACT.match(label)
+    return m.group(1) if m else label
+
+
+def pick_shafts(labels: list[str], frac: float, key: str) -> set[str]:
+    """round(frac * n_shafts) whole shafts (at least 1, and never all), chosen at random
+    from `key`. Returns the chosen shaft names."""
+    shafts = sorted({shaft_of(e) for e in labels})
+    k = min(len(shafts) - 1, max(1, int(round(frac * len(shafts)))))
+    rng = np.random.default_rng(zlib.crc32(key.encode()))
+    return set(rng.choice(shafts, size=k, replace=False).tolist())
+
+
 def _val_people(d: dict, split: str, npc) -> list[int]:
     """data.val_subjects (cross_subject only): people held out of training whose
     recording (their trial in subject_trials) is the validation set that picks the
@@ -272,6 +288,17 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     if not 0.0 < wfrac <= 1.0:
         raise ValueError(f"data.train_window_frac must be in (0, 1], not {wfrac}")
     wsub_seed = int(d.get("train_window_seed", 0))
+    # Held-out shafts (split=heldout_shafts): cross-session (train on one movie, test on
+    # the other), but each person's contacts are split by WHOLE sEEG shaft. A fraction
+    # data.heldout_shaft_frac of shafts (draw data.heldout_split) is never trained on;
+    # the test input is those shafts only. data.train_shaft_frac thins the remaining
+    # (training) shafts, whole shafts again (density). See configs/sweeps/heldout_shafts.yaml.
+    hs_frac = float(d.get("heldout_shaft_frac", 0.25))
+    hs_split = int(d.get("heldout_split", 0))
+    ts_frac = float(d.get("train_shaft_frac", 1.0))
+    ts_seed = int(d.get("train_shaft_seed", 0))
+    if split == "heldout_shafts" and not (0.0 < hs_frac < 1.0 and 0.0 < ts_frac <= 1.0):
+        raise ValueError("heldout_shaft_frac must be in (0, 1) and train_shaft_frac in (0, 1]")
     held_out = {int(x) for x in d.get("test_subjects", [])} if split == "cross_subject" else set()
     val_people = _val_people(d, split, npc)
     held_out |= set(val_people)   # validation people keep all their electrodes, like test people
@@ -300,10 +327,14 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
         return sessions[(s, t)]
 
     infos: dict[str, SubjectInfo] = {}
-    elec: dict[int, list[str]] = {}
+    elec: dict[str, list[str]] = {}
+    heldout_info: dict[str, dict] = {}
 
-    def subject_info(s: int) -> SubjectInfo:
-        sid = f"btb{s:02d}"
+    def subject_info(s: int, part: str = "") -> SubjectInfo:
+        """part "" = the electrodes trained on; for split=heldout_shafts also
+        "h" = the held-out shafts and "a" = training + held-out shafts, each its own
+        pseudo-subject (btb01h, btb01a) with its own electrode list and spatial codes."""
+        sid = f"btb{s:02d}{part}"
         if sid not in infos:
             subj = subjects_npb[s]
             if which == "lite":
@@ -321,6 +352,17 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                 n_keep = max(1, int(round(tfrac * len(labels))))
                 keep = set(rng.choice(len(labels), size=n_keep, replace=False).tolist())
                 labels = [e for i, e in enumerate(labels) if i in keep]
+            if split == "heldout_shafts":
+                hidden = pick_shafts(labels, hs_frac, f"hshaft_{s}_{hs_split}")
+                train_l = [e for e in labels if shaft_of(e) not in hidden]
+                if ts_frac < 1.0:
+                    keep_sh = pick_shafts(train_l, ts_frac, f"tshaft_{s}_{hs_split}_{ts_seed}")
+                    train_l = [e for e in train_l if shaft_of(e) in keep_sh]
+                hid_l = [e for e in labels if shaft_of(e) in hidden]
+                labels = {"": train_l, "h": hid_l,
+                          "a": [e for e in labels if e in set(train_l) | set(hid_l)]}[part]
+            elif part:
+                raise ValueError(f"electrode part {part!r} only exists for split=heldout_shafts")
             all_xyz = np.asarray(subj.get_electrode_coordinates(), dtype=np.float64)
             pos = {e: i for i, e in enumerate(subj.electrode_labels)}
             xyz = all_xyz[[pos[e] for e in labels]]
@@ -337,7 +379,7 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             except Exception as ex:  # not needed for atlas-based encodings
                 print(f"[neuroprobe] subject {s}: no dataset labels ({ex})")
             infos[sid] = SubjectInfo(sid, xyz, labels, dataset_labels=extra)
-            elec[s] = labels
+            elec[sid] = labels
         return infos[sid]
 
     prep = cfg.get("preprocess") or {}
@@ -347,22 +389,26 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
     stats_cache: dict[tuple[int, int], tuple] = {}
     n_unref: dict[str, int] = {}
 
-    def plan(s: int, t: int):
-        """(cache rows to read, mix matrix or None) for subject s, recording t."""
-        if (s, t) not in read_plan:
+    def plan(s: int, t: int, part: str = ""):
+        """(cache rows to read, mix matrix or None) for subject s, recording t.
+        Laplacian neighbours are contact number +-1 on the SAME shaft, so with whole
+        shafts held out no training channel's reference contains a held-out contact."""
+        sid = f"btb{s:02d}{part}"
+        if (sid, t) not in read_plan:
             sd = session(s, t)
-            labels = elec[s]
+            labels = elec[sid]
             if reref == "laplacian":
                 read, mix, n0 = laplacian_mix(labels, sd.labels)
-                n_unref[f"btb{s:02d}"] = n0
-                read_plan[(s, t)] = (sd.rows(read), SparseMix(mix))
+                n_unref[sid] = n0
+                read_plan[(sid, t)] = (sd.rows(read), SparseMix(mix))
             else:
-                read_plan[(s, t)] = (sd.rows(labels), None)
-        return read_plan[(s, t)]
+                read_plan[(sid, t)] = (sd.rows(labels), None)
+        return read_plan[(sid, t)]
 
     n_train_windows: dict[str, int] = {}
 
-    def windows(s: int, t: int, ds, idx: np.ndarray | None = None, train: bool = False) -> CachedWindows:
+    def windows(s: int, t: int, ds, idx: np.ndarray | None = None, train: bool = False,
+                part: str = "") -> CachedWindows:
         starts, labels, n_raw = _indices(ds)
         if idx is not None:
             starts, labels = starts[idx], labels[idx]
@@ -372,18 +418,19 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
         if train:
             n_train_windows[f"btb{s:02d}_{t}"] = int(len(starts))
         sd = session(s, t)
-        info = subject_info(s)
+        info = subject_info(s, part)
         n_out = int(round(n_raw * sd.ratio))
-        rows, mix = plan(s, t)
+        rows, mix = plan(s, t, part)
         stats = None
-        if zmode == "session":
-            if (s, t) not in stats_cache:
-                stats_cache[(s, t)] = session_stats(sd, rows, mix, ops, n_out,
-                                                    seed=zlib.crc32(f"{s}_{t}".encode()))
-            stats = stats_cache[(s, t)]
+        if zmode == "session":   # per channel, from that channel's own recording: no mixing
+            if (info.subject_id, t) not in stats_cache:
+                stats_cache[(info.subject_id, t)] = session_stats(sd, rows, mix, ops, n_out,
+                                                                  seed=zlib.crc32(f"{s}_{t}".encode()))
+            stats = stats_cache[(info.subject_id, t)]
         return CachedWindows(sd, rows, starts, labels, n_out, info.subject_id, ops, mix, stats)
 
     trains, vals, tests, monitors, train_sids = [], [], [], [], set()
+    extra_tests: dict = {}
     kw = dict(eval_name=eval_name, lite=True, output_indices=True)
     if split in ("within_session", "cross_session"):
         for s, t in pairs:
@@ -399,6 +446,41 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
             vals.append(windows(s, t, fold["val_dataset"]))
             tests.append(windows(s, t, fold["test_dataset"]))
             train_sids.add(f"btb{s:02d}")
+    elif split == "heldout_shafts":
+        if reref == "car":
+            print("[neuroprobe] WARNING: heldout_shafts with CAR: the average is taken over each "
+                  "pseudo-subject's own channels (no cross-part mixing), but the shaft Laplacian "
+                  "is the planned reference", flush=True)
+        extra = {"train_shafts": [], "all_shafts": []}
+        for s, t in pairs:
+            subj = subjects_npb[s]
+            fold = npb.generate_splits_cross_session(subj, t, **kw)[0]
+            train_t = [tt for ss, tt in npc.NEUROPROBE_LITE_SUBJECT_TRIALS if ss == s and tt != t][0]
+            trains.append(windows(s, train_t, fold["train_dataset"], train=True))
+            # Validation (picks the epoch): TRAINING shafts on the first half of the test
+            # movie, so no held-out-shaft label is used anywhere before the test.
+            vals.append(windows(s, t, fold["val_dataset"]))
+            tests.append(windows(s, t, fold["test_dataset"], part="h"))     # headline: held-out only
+            extra["train_shafts"].append(windows(s, t, fold["test_dataset"]))
+            extra["all_shafts"].append(windows(s, t, fold["test_dataset"], part="a"))
+            train_sids.add(f"btb{s:02d}")
+            tr_i, h_i = infos[f"btb{s:02d}"], infos[f"btb{s:02d}h"]
+            dist = np.linalg.norm(h_i.coords[:, None] - tr_i.coords[None], axis=-1).min(1)
+            heldout_info[f"btb{s:02d}h"] = {
+                "n_shafts_heldout": len({shaft_of(e) for e in h_i.electrode_names}),
+                "n_shafts_train": len({shaft_of(e) for e in tr_i.electrode_names}),
+                "n_contacts_heldout": h_i.n_electrodes, "n_contacts_train": tr_i.n_electrodes,
+                # leak check: must be 0 (no shaft both trained on and held out)
+                "n_shared_shafts": len({shaft_of(e) for e in h_i.electrode_names}
+                                       & {shaft_of(e) for e in tr_i.electrode_names}),
+                "dist_nearest_own_train_mm_median": float(np.median(dist)),
+                "dist_nearest_own_train_mm_mean": float(np.mean(dist))}
+        all_train = np.concatenate([infos[f"btb{s:02d}"].coords for s, _ in pairs])
+        for s, _ in pairs:
+            h = infos[f"btb{s:02d}h"].coords
+            heldout_info[f"btb{s:02d}h"]["dist_nearest_any_train_mm_median"] = float(
+                np.median(np.linalg.norm(h[:, None] - all_train[None], axis=-1).min(1)))
+        extra_tests = {k: ConcatDataset(v) for k, v in extra.items()}
     elif split == "cross_subject":
         test_subjects = {int(x) for x in d["test_subjects"]}
         listed = {s for s, _ in pairs}
@@ -469,6 +551,7 @@ def make_neuroprobe(cfg: dict, seed: int) -> DataBundle:
                       n_classes=max(2, n_classes),
                       monitor=ConcatDataset(monitors) if monitors else None,
                       val_subjects=[f"btb{s:02d}" for s in val_people],
+                      extra_tests=extra_tests, heldout_info=heldout_info,
                       description=f"neuroprobe {eval_name} {split} electrodes={which} frac={efrac:g} train_frac={tfrac:g} "
                                   f"train_window_frac={wfrac:g} train_windows={n_train_windows} "
                                   f"reref={reref} zscore={zmode}"

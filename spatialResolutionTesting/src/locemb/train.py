@@ -279,6 +279,38 @@ def run(cfg: dict) -> dict:
         print("[calibrate] " + "  ".join(f"{k}: {v['auc']:.4f} (n={sum(v['n_calib'].values())})"
                                          for k, v in calib.items()), flush=True)
 
+    # split=heldout_shafts: the same selected model on other test inputs, and the held-out
+    # shafts under test-time location manipulations (training never changes):
+    #   train_shafts / all_shafts   training shafts only / training + held-out shafts
+    #   heldout_unknown             held-out contacts all get the <unknown> code
+    #   heldout_shuffled_cells      held-out contacts get the code of another TRAINED cell
+    #                               (one fixed permutation of trained cells): right amount of
+    #                               trained codes, wrong places
+    heldout = None
+    if bundle.extra_tests or bundle.heldout_info:
+        heldout = {"info": bundle.heldout_info, "tests": {}, "coverage": {}}
+        for name, ds in bundle.extra_tests.items():
+            heldout["tests"][name] = _public(evaluate(model, mk(ds, False), device, bundle.n_classes))
+        hids = [sid for sid in bundle.heldout_info]
+        for sid in hids:
+            t = assign.table[sid]
+            heldout["coverage"][sid] = float(1.0 - (t["w"] * (t["idx"] == 0)).sum() / t["idx"].shape[0])
+        if cfg["spatial"].get("type", "none") != "none" and assign.n_regions > 1:
+            V = assign.n_regions
+            perm = torch.from_numpy(np.concatenate(
+                [[0], 1 + np.random.default_rng(seed + 31337).permutation(V - 1)]))
+            for name, fn in (("heldout_unknown", lambda t: {**t, "idx": torch.zeros_like(t["idx"]),
+                                                            "w": torch.cat([torch.ones_like(t["w"][:, :1]),
+                                                                            torch.zeros_like(t["w"][:, 1:])], 1)}),
+                             ("heldout_shuffled_cells", lambda t: {**t, "idx": perm[t["idx"]]})):
+                tab = {sid: (fn(t) if sid in hids else t) for sid, t in assign.table.items()}
+                dl = DataLoader(bundle.test, batch_size=tr.get("batch_size", 32), shuffle=False,
+                                num_workers=nw, collate_fn=Collator(tab),
+                                worker_init_fn=_one_thread_worker if nw > 0 else None)
+                heldout["tests"][name] = _public(evaluate(model, dl, device, bundle.n_classes))
+        print("[heldout] " + "  ".join(f"{k}: {v['mean_subject_auc']:.4f}" for k, v in heldout["tests"].items())
+              + f"  coverage: {np.mean(list(heldout['coverage'].values())):.3f}", flush=True)
+
     # How much does the trained model rely on location? Re-test with each
     # subject's location codes shuffled among its electrodes.
     probe = None
@@ -302,7 +334,7 @@ def run(cfg: dict) -> dict:
         "test_per_subject_auc": test["per_subject_auc"],
         "test_mean_subject_auc": test["mean_subject_auc"],
         "test_best": _public(test_best), "test_last": _public(test_last),
-        "location_probe": probe, "calibration": calib, "best_val": best,
+        "location_probe": probe, "calibration": calib, "heldout": heldout, "best_val": best,
         "n_train_windows": len(bundle.train),
         "train_window_frac": float(cfg["data"].get("train_window_frac", 1.0) or 1.0),
         "best_epoch": max([h["epoch"] for h in history if h.get("best")], default=None),

@@ -1,0 +1,81 @@
+# EXTENDED NEW-PERSON ARM (decided 2026-11-27). Adds to configs/sweeps/main_xsubj.yaml
+# (same protocol, so its none/40/20/10 mm runs are the e100 baselines; the report reads
+# both folders). main_xsubj found location transfers once the readout is calibrated
+# (20 mm cubes +0.085 AUC over none at 10% calibration, 6/6 people) and 20 mm beat 40 and
+# 10 mm at every calibration level: a first hint of an interior best size.
+# This sweep asks: does that best size have edges, and does it move with density?
+#   e100 (all training electrodes): add cubes 80 and 5 mm (edges of the curve) and
+#        Schaefer 400 and 1000, hard vs soft (gauss3): the targeted replication of the
+#        coverage finding (hard left 39% of a new person's weight on <unknown> at 1000,
+#        27% at 400; soft 17% / 10%). Prediction: soft - hard larger at 1000 than 400.
+#        Not at e30 (Phase 0 soft - hard was negative at half density, no prediction).
+#   e30 (training people keep 30% of their electrodes, data.train_electrode_frac; the
+#        held-out person keeps all): none + cubes 80/40/20/10/5 mm. 10% was rejected:
+#        too many empty cubes at <= 20 mm.
+# Protocol as main_xsubj: leave-one-person-out, 5 training people, fixed 20 epochs, last
+# epoch; zero-shot and calibrated (frozen model, linear readout on 10/25/100% of the
+# first half) from the same run. 6 people x 6 seeds.
+# Runs: e100 6 encodings x 36 = 216; e30 6 x 36 = 216; total 432 (~51 A100-h).
+#
+# Analysis, fixed before running (scripts/main_report.py xsubj2 over results/main_xsubj
+# and results/main_xsubj_ext; old runs count as e100):
+#   C1 resolution curve per density and calibration level (gain over none, sign-flip
+#      over people); best size per density; does it move finer at e100 than e30?
+#   C2 soft - hard at e100 per atlas and calibration level, with coverage;
+#      is the gain larger at Schaefer 1000 than 400?
+config: configs/neuroprobe_v2.yaml
+exp_name: main_xsubj_ext
+overrides:
+  model.name: transformer
+  data.split: cross_subject
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: car
+  model.readout: cls
+  train.epochs: 20
+  train.min_epochs: 20
+  train.select: last
+  train.calibrate: [0.1, 0.25, 1.0]
+axes:
+  fold:
+    ho01: {data.test_subjects: [1]}
+    ho02: {data.test_subjects: [2]}
+    ho03: {data.test_subjects: [3]}
+    ho04: {data.test_subjects: [4]}
+    ho07: {data.test_subjects: [7]}
+    ho10: {data.test_subjects: [10]}
+  density:
+    e30:  {data.train_electrode_frac: 0.3}
+    e100: {data.train_electrode_frac: 1.0}
+  spatial:
+    none:                {spatial.type: none}
+    grid80:              {spatial.type: region, spatial.atlas: grid80}
+    grid40:              {spatial.type: region, spatial.atlas: grid40}
+    grid20:              {spatial.type: region, spatial.atlas: grid20}
+    grid10:              {spatial.type: region, spatial.atlas: grid10}
+    grid5:               {spatial.type: region, spatial.atlas: grid5}
+    schaefer400_hard:    {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    schaefer400_gauss3:  {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
+    schaefer1000_hard:   {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: hard}
+    schaefer1000_gauss3: {spatial.type: region, spatial.atlas: schaefer1000, spatial.mode: gaussian, spatial.sigma_mm: 3}
+  seed:
+    "0": {seed: 0, data.train_electrode_seed: 0}
+    "1": {seed: 1, data.train_electrode_seed: 1}
+    "2": {seed: 2, data.train_electrode_seed: 2}
+    "3": {seed: 3, data.train_electrode_seed: 3}
+    "4": {seed: 4, data.train_electrode_seed: 4}
+    "5": {seed: 5, data.train_electrode_seed: 5}
+exclude:
+  # already run in main_xsubj (all electrodes)
+  - {density: e100, spatial: none}
+  - {density: e100, spatial: grid40}
+  - {density: e100, spatial: grid20}
+  - {density: e100, spatial: grid10}
+  # soft vs hard only at full density
+  - {density: e30, spatial: schaefer400_hard}
+  - {density: e30, spatial: schaefer400_gauss3}
+  - {density: e30, spatial: schaefer1000_hard}
+  - {density: e30, spatial: schaefer1000_gauss3}

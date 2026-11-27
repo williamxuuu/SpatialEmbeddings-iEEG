@@ -1,0 +1,83 @@
+# HELD-OUT SHAFTS (decided 2026-11-27). Within one person, can a location code alone
+# carry a model to electrodes it never trained on, and is there a best cube size that
+# moves with how many training electrodes share each cube?
+#
+# Why: within person with all electrodes trained (main_xsess), finer was always better
+# because a fine code is an electrode name tag. Hiding whole shafts removes the tag:
+# a hidden contact's only clue is which cube it is in, so too-fine cubes are empty
+# (no training neighbours) and too-coarse cubes mix different function.
+# Literature check: reports/Held out electrode generalization.md (no iEEG paper does
+# location-only held-out-shaft decoding or crosses resolution with density; closest
+# Javadzadeh et al., SuperEEG). Its recommendations, built in here:
+#   - whole shafts hidden (same-shaft contacts 3.5-5 mm apart share signal);
+#     data.heldout_shaft_frac 0.25 of each person's shafts (3-4 of 12-18 shafts,
+#     24-57 contacts), from ALL contacts, not Neuroprobe Lite's pre-ranked set
+#   - shaft Laplacian reference (neighbours on the same shaft only), so no training
+#     channel's reference contains a hidden contact (CAR would mix them in)
+#   - crossed with time: train on movie A, test on movie B (Neuroprobe cross-session)
+#   - epoch picked on TRAINING shafts (first half of movie B); no hidden-shaft label is
+#     used before the test (second half of movie B)
+#   - the headline test input is the hidden shafts ONLY; the same model is also scored on
+#     training shafts only and on training + hidden (metrics["heldout"]["tests"])
+#   - test-time location checks on hidden shafts: every code -> <unknown>, and codes
+#     replaced by another trained cell's (fixed permutation): right codes, wrong place
+#   - coverage (share of hidden weight on cubes training occupied) and distance to the
+#     nearest training contact are saved per person (metrics["heldout"])
+# Density = data.train_shaft_frac: keep 25 / 50 / 100% of the remaining training
+# shafts (whole shafts; factor 4). Other people's training shafts are in the model too.
+# Encodings: none; cubes 80/40/20/10/5 mm; Schaefer 400 hard and soft (gauss3).
+# Per-electrode IDs and train-time shuffled cubes are left out: for hidden shafts the
+# test-time <unknown> and shuffled-cell checks play their roles.
+# Repetition: 6 shaft splits x 2 seeds = 12 per cell (which shafts are hidden is likely
+# the bigger noise source; splits are new tests, seeds re-run one split).
+# 3 densities x 8 encodings x 6 splits x 2 seeds = 288 runs (~29 A100-h measured rate).
+#
+# Analysis, fixed before running (scripts/main_report.py xheld): outcome = held-out-shaft
+# test AUC at the selected epoch, per person (btbXXh), averaged over splits and seeds.
+#   R1 resolution curve per density, gain over none (analyze_density.py machinery,
+#      splits x seeds as replicates): is there an interior best size, and does it move
+#      finer with more training shafts (H1 slope interaction, H2 vertex shift)?
+#   R2 true codes - shuffled-cell codes and true - <unknown>, per density, sign-flip
+#      over the 6 people: does the LOCATION carry information to unseen shafts?
+#   R3 coverage: AUC vs coverage and vs distance to the nearest training contact;
+#      does the best size survive conditioning on coverage (H3)?
+#   Also: split SD vs seed SD; training-shafts-only and all-shafts scores.
+config: configs/neuroprobe_v2.yaml
+exp_name: heldout_shafts
+overrides:
+  model.name: transformer
+  data.split: heldout_shafts
+  data.eval_name: speech
+  data.electrodes: all
+  data.subject_trials: [[1, 2], [2, 4], [3, 1], [4, 1], [7, 1], [10, 1]]
+  data.heldout_shaft_frac: 0.25
+  model.frontend: stft
+  preprocess.zscore: session
+  preprocess.reref: laplacian
+  model.readout: cls
+  train.epochs: 40
+  train.min_epochs: 20
+  train.patience: 10
+  train.select: best
+axes:
+  density:
+    s25:  {data.train_shaft_frac: 0.25}
+    s50:  {data.train_shaft_frac: 0.5}
+    s100: {data.train_shaft_frac: 1.0}
+  spatial:
+    none:               {spatial.type: none}
+    grid80:             {spatial.type: region, spatial.atlas: grid80}
+    grid40:             {spatial.type: region, spatial.atlas: grid40}
+    grid20:             {spatial.type: region, spatial.atlas: grid20}
+    grid10:             {spatial.type: region, spatial.atlas: grid10}
+    grid5:              {spatial.type: region, spatial.atlas: grid5}
+    schaefer400_hard:   {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: hard}
+    schaefer400_gauss3: {spatial.type: region, spatial.atlas: schaefer400, spatial.mode: gaussian, spatial.sigma_mm: 3}
+  split:
+    "0": {data.heldout_split: 0, data.train_shaft_seed: 0}
+    "1": {data.heldout_split: 1, data.train_shaft_seed: 1}
+    "2": {data.heldout_split: 2, data.train_shaft_seed: 2}
+    "3": {data.heldout_split: 3, data.train_shaft_seed: 3}
+    "4": {data.heldout_split: 4, data.train_shaft_seed: 4}
+    "5": {data.heldout_split: 5, data.train_shaft_seed: 5}
+  seed: [0, 1]
